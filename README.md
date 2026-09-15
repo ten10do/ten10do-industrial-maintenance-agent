@@ -26,12 +26,14 @@ accuracy, tool selection and argument handling are quantified instead of assumed
 The baseline is produced by running the real planner over the real dataset. No stub
 is scored, and no number is reported that was not measured.
 
-V0.7 extends that framework toward a real LLM planner benchmark. It adds a Rule
-versus LLM comparison that refuses to approximate, a latency distribution with a
-documented p95 convention, and the gate that stops a stub from standing in for a
-provider. The real run has not happened here: no provider is configured in this
-environment, so the LLM column stays empty and the gate reports
-`REAL_LLM_EVALUATION_NOT_RUN`. No LLM metric is estimated, inferred or invented.
+V0.7 extends that framework to a real LLM planner benchmark. It adds a Rule versus
+LLM comparison that refuses to approximate, a latency distribution with a documented
+p95 convention, and the gate that stops a stub from standing in for a provider. The
+benchmark has since been run against a real external provider (`openai_compatible`,
+model `deepseek-flash`): 49 cases, planner-only, no tool execution. The LLM column,
+the comparison deltas and the out-of-domain comparison are published below. Every
+number comes from the recorded run under `evaluation/reports/`; none is estimated,
+inferred or invented.
 
 ## Stack
 
@@ -918,7 +920,7 @@ cases, planner-only, dataset SHA-256 `af873b6c…`. These are recorded measureme
 | `unnecessary_tool_call_rate` | 0.1200 | 9 / 75 |
 | `task_success_rate` | 0.7959 | 39 / 49 |
 | `planner_failure_rate` | 0.0000 | 0 / 49 |
-| `average_planning_latency_ms` | 0.24 | 49 samples |
+| `average_planning_latency_ms` | 0.2103 | 49 samples |
 
 For a fixed dataset and planner the nine behavioural metrics above are
 deterministic. Planning latency is wall time on this machine and moves by a few
@@ -928,11 +930,11 @@ instead of a single figure.
 | Statistic | `planning_latency_ms` |
 | --------- | --------------------- |
 | samples | 49 |
-| mean | 0.240 |
-| median | 0.215 |
-| p95 | 0.337 |
-| min | 0.184 |
-| max | 0.496 |
+| mean | 0.2103 |
+| median | 0.197 |
+| p95 | 0.2594 |
+| min | 0.181 |
+| max | 0.500 |
 
 The p95 interpolates between order statistics, the convention
 `evaluation.metrics.percentile` documents, because a moved convention would move the
@@ -976,26 +978,35 @@ The recorded rule baseline was produced from that exact file, and
 `tests/test_evaluation.py` fails if the shipped dataset ever stops matching the hash
 the baseline names. Nothing here is comparable across a dataset change.
 
-**LLM Evaluation: NOT RUN.** No provider is configured in this environment, so the
-LLM column below is empty and no LLM number appears anywhere in this README. The
-provider and model name cannot be stated because none was used.
+**LLM Evaluation: measured.** The LLM planner ran against a real external provider
+(`openai_compatible`, model `deepseek-flash`) over the same frozen 49-case dataset,
+planner-only, with no tool execution. The provider, endpoint and model are recorded in
+`planner_runtime.provider` inside `llm_baseline.json`. The API key is never recorded:
+the provider reads it from a `SecretStr` only when it builds the request header, and
+its error text is built from the status code alone.
 
-| Metric | Rule planner | LLM planner |
-| ------ | ------------ | ----------- |
-| `intent_accuracy` | 0.9756 (40/41) | not measured |
-| `tool_selection_exact_match` | 0.7959 (39/49) | not measured |
-| `tool_precision` | 0.8800 (66/75) | not measured |
-| `tool_recall` | 0.9851 (66/67) | not measured |
-| `argument_accuracy` | 1.0000 (42/42) | not measured |
-| `invalid_tool_rate` | 0.0000 (0/75) | not measured |
-| `unnecessary_tool_call_rate` | 0.1200 (9/75) | not measured |
-| `task_success_rate` | 0.7959 (39/49) | not measured |
-| `planner_failure_rate` | 0.0000 (0/49) | not measured |
-| `average_planning_latency_ms` | 0.240 (49 samples) | not measured |
-| `planning_latency_ms` p95 | 0.337 | not measured |
+| Metric | Rule planner | LLM planner | delta (LLM - Rule) |
+| ------ | ------------ | ----------- | ------------------ |
+| `intent_accuracy` | 0.9756 (40/41) | 0.9756 (40/41) | 0.0000 |
+| `tool_selection_exact_match` | 0.7959 (39/49) | 0.8163 (40/49) | +0.0204 |
+| `tool_precision` | 0.8800 (66/75) | 0.9394 (62/66) | +0.0594 |
+| `tool_recall` | 0.9851 (66/67) | 0.9254 (62/67) | -0.0597 |
+| `argument_accuracy` | 1.0000 (42/42) | 1.0000 (37/37) | 0.0000 |
+| `invalid_tool_rate` | 0.0000 (0/75) | 0.0000 (0/66) | 0.0000 |
+| `unnecessary_tool_call_rate` | 0.1200 (9/75) | 0.0606 (4/66) | -0.0594 |
+| `task_success_rate` | 0.7959 (39/49) | 0.7959 (39/49) | 0.0000 |
+| `planner_failure_rate` | 0.0000 (0/49) | 0.0000 (0/49) | 0.0000 |
+| `average_planning_latency_ms` | 0.2103 (49 samples) | 1551.94 (49 samples) | +1551.73 |
+| `planning_latency_ms` p95 | 0.2594 | 2365.45 | +2365.19 |
 
-No claim of improvement is made, because no measurement supports one. The rule column
-is the whole of the evidence.
+The comparison is not a clean win for either side, and it should not be read as one.
+`task_success_rate` and `intent_accuracy` are identical. The LLM buys exact matches and
+fewer unnecessary calls by trading away recall: it misses five expected tools that the
+rule planner selects. The price is latency, where one provider call costs roughly four
+orders of magnitude more than the in-process rule planner. `delta` is always
+`llm - rule`; the error rates and the latency carry `lower_is_better`, so the two
+negative deltas above are improvements and the two positive latency deltas are a
+regression. The full per-metric verdicts live in `planner_comparison.json`.
 
 Failures, rule planner. Ten cases, and one known weakness explains all of them.
 
@@ -1005,16 +1016,35 @@ Failures, rule planner. Ten cases, and one known weakness explains all of them.
 | `missing_tool` | 1: `ro-003`, which also carries `intent_mismatch` |
 | `unexpected_tool_call_on_ood` | 3: `ood-006`, `ood-007`, `ood-008` |
 
-Failures, LLM planner: not measured.
+Failures, LLM planner. Ten cases, and the pattern differs from the rule planner.
+
+| Primary failure type | Cases |
+| -------------------- | ----- |
+| `missing_tool` | 5: `ma-002`, `ma-003`, `ma-005`, `ma-006`, `mt-007` |
+| `unnecessary_tool` | 4: `ds-002`, `ad-004`, `ad-006`, `ad-008` |
+| `intent_mismatch` | 1: `mt-005` |
+| `unexpected_tool_call_on_ood` | 0 |
+
+The rule planner's dominant weakness was over-calling the manual search; the LLM's is
+the opposite, under-calling it. Four of the five `missing_tool` cases are
+`maintenance_advice` queries where the LLM answered from `get_device_status` alone and
+skipped retrieval. Its `unnecessary_tool` cases overlap the rule planner's, but the
+count is lower. The failure report is `llm_failures.json`.
 
 Out-of-domain performance, rule planner, over the 8 out-of-domain cases.
 
 | OOD measure | Rule planner | LLM planner |
 | ----------- | ------------ | ----------- |
-| `tool_call_rate` | 0.375 (3/8) | not measured |
-| `unnecessary_tool_call_rate` | 0.375 (3/8, same number by construction) | not measured |
-| silent cases | 5 | not measured |
-| offending cases | `ood-006`, `ood-007`, `ood-008` | not measured |
+| `tool_call_rate` | 0.375 (3/8) | 0.000 (0/8) |
+| `unnecessary_tool_call_rate` | 0.375 (3/8, same number by construction) | 0.000 (0/8, same number by construction) |
+| silent cases | 5 | 8 |
+| offending cases | `ood-006`, `ood-007`, `ood-008` | none |
+
+This is the LLM planner's clearest advantage. It stays silent on all eight
+out-of-domain cases, where the rule planner answers three of them with a tool call.
+The `tool_call_rate` delta is `-0.375`. The two rates stay one number per planner for
+the reason above; an out-of-domain case expects no tool, so every selected tool is
+unnecessary by construction.
 
 The two out-of-domain rates are one number, not two. An out-of-domain case expects
 no tool, so every selected tool is by definition unnecessary and the two rates
@@ -1050,16 +1080,45 @@ different datasets are refused with both hashes named. The rule side is read fro
 recorded artefact and is never re-run, so a more favourable draw cannot be selected
 after the fact.
 
+### End-to-end subset
+
+A fixed 12-case subset (two per category across `device_status`, `alarm_diagnosis`,
+`maintenance_advice`, `rag_only`, `multi_tool` and `ood`) runs the whole pipeline with
+the real LLM planner and with tool execution, to check that planning survives contact
+with execution. It is a separate run mode and is **not** folded into the planner-only
+comparison.
+
+| Measure | Value |
+| ------- | ----- |
+| cases | 12 |
+| `planning_latency_ms` mean | 1565.44 |
+| `execution_latency_ms` mean | 1.29 |
+| `rag_latency_ms` | `null` (0 samples) |
+| `total_latency_ms` mean | 1566.77 |
+| evidence items | 10 across 12 cases |
+| cases with an execution error | 8 / 12 |
+| cases with a rendered answer | 12 / 12 |
+
+Every execution error is the same one: `search_maintenance_manual` reports that the
+RAG repo root is required. That is the documented environment limit, not a planner
+defect, and it is why retrieval latency has no samples. The raw per-case record is
+`llm_e2e_subset.json`.
+
 ### Reports
 
-Reports are written to `evaluation/reports/`. A planner-only rule run writes
-`rule_baseline.json` and `rule_failures.json`, an end-to-end run writes
-`rule_e2e_baseline.json` and `rule_e2e_failures.json`, a gated run writes
-`<planner>_evaluation_status.json`, and the comparison writes either
-`planner_comparison.json` or, when it refuses, `planner_comparison_status.json`. Every
-baseline records the dataset path and SHA-256, the planner mode, the run mode, the git
-commit, the registry contents and the application version, so a number can always be
-traced back to the input that produced it.
+Reports are written to `evaluation/reports/`. A planner-only run writes
+`<planner>_baseline.json` and `<planner>_failures.json`, so the rule and LLM baselines
+sit side by side as `rule_baseline.json` / `rule_failures.json` and
+`llm_baseline.json` / `llm_failures.json`. An end-to-end run writes
+`rule_e2e_baseline.json` and `rule_e2e_failures.json`. The comparison writes
+`planner_comparison.json`, or `planner_comparison_status.json` when it refuses. A unit
+of the smoke and end-to-end subset checks write `llm_smoke.json` and
+`llm_e2e_subset.json`; both are marked as their own run modes and are never folded
+into the planner-only comparison. A gate report named `<planner>_evaluation_status.json`
+is written only when a run refuses because the provider is missing. Every baseline
+records the dataset path and SHA-256, the planner mode, the run mode, the git commit,
+the registry contents and the application version, so a number can always be traced
+back to the input that produced it.
 
 ### Known limits
 
@@ -1071,10 +1130,10 @@ traced back to the input that produced it.
    that the synthesis step writes.
 3. **Eight out-of-domain cases can show a weakness, not bound its rate.** A larger
    adversarial set is the only way to turn `0.375` into a defensible estimate.
-4. **No LLM planner has been measured in this repository.** Every LLM cell above is
-   empty by design. The comparison tooling exists and is covered by tests, but while
-   no provider is configured there is nothing to compare and `planner_comparison.json`
-   is not produced. This limit is the reason the other limits stay unqualified.
+4. **The LLM column is one run of one model.** It is a real external provider
+   (`openai_compatible`, model `deepseek-flash`), recorded in `llm_baseline.json`, but a
+   single run carries provider-side variance that one baseline cannot express.
+   Temperature is fixed at 0, which reduces that variance without removing it.
 5. **One dataset and one run per planner.** A comparison over 49 hand-authored cases
    bounds neither planner on other queries, and a single LLM run carries provider-side
    variance that one baseline cannot express. A repeated run would be needed before
@@ -1084,11 +1143,9 @@ traced back to the input that produced it.
 
 1. Add device read endpoints backed by the `Device` model.
 2. Add an Alembic migration for schema versioning.
-3. Run the LLM evaluation once a provider is configured, then publish the LLM column
-   and the comparison next to the rule baseline: benchmark with
-   `python -m evaluation.runner --planner llm --dataset evaluation/dataset.json` and
-   compare with `python -m evaluation.comparison`. Until then the gate reports
-   `LLM_EVALUATION_NOT_RUN` and the comparison refuses rather than approximating.
+3. Repeat the LLM benchmark across several runs to turn the single recorded baseline
+   into a distribution, then report provider-side latency variance instead of one
+   sample. The recorded baseline is a single run.
 4. Reduce manual retrieval latency. Measured against the four-document Rockwell
    corpus (4219 chunks), a manual query costs about 4.9 s in steady state, and the
    first query in a fresh process costs about 7.3 s while the module import and

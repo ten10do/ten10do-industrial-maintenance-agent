@@ -1,0 +1,155 @@
+{
+  "schema_version": "1.0",
+  "planner_mode": "llm",
+  "run_mode": "planner_only",
+  "provider": {
+    "provider_id": "openai_compatible",
+    "base_url": "https://api.deepseek.com",
+    "model": "deepseek-flash"
+  },
+  "model": "deepseek-flash",
+  "cases": [
+    {
+      "category": "device_status",
+      "case_id": "ds-001",
+      "expected_intent": "device_status",
+      "expected_tools": [
+        "get_device_status"
+      ],
+      "actual_intent": "device_status",
+      "actual_tools": [
+        "get_device_status"
+      ],
+      "arguments": {
+        "get_device_status": {
+          "device_id": "PLC-001"
+        }
+      },
+      "planning_latency_ms": 1659.177,
+      "planner_error": null,
+      "intent_ok": true,
+      "tools_ok": true,
+      "success": true,
+      "success_rule": "intent match AND tool set match"
+    },
+    {
+      "category": "alarm_diagnosis",
+      "case_id": "ad-001",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": [
+        "get_device_status",
+        "query_alarm_code",
+        "search_maintenance_manual"
+      ],
+      "actual_intent": "alarm_diagnosis",
+      "actual_tools": [
+        "query_alarm_code",
+        "get_device_status",
+        "search_maintenance_manual"
+      ],
+      "arguments": {
+        "query_alarm_code": {
+          "alarm_code": "F0045"
+        },
+        "get_device_status": {
+          "device_id": "PLC-001"
+        },
+        "search_maintenance_manual": {
+          "query": "包装线PLC 报警 F0045 处理方法"
+        }
+      },
+      "planning_latency_ms": 1553.22,
+      "planner_error": null,
+      "intent_ok": true,
+      "tools_ok": true,
+      "success": true,
+      "success_rule": "intent match AND tool set match"
+    },
+    {
+      "category": "maintenance_advice",
+      "case_id": "ma-001",
+      "expected_intent": "maintenance_advice",
+      "expected_tools": [
+        "get_device_status",
+        "search_maintenance_manual"
+      ],
+      "actual_intent": "maintenance_advice",
+      "actual_tools": [
+        "get_device_status",
+        "search_maintenance_manual"
+      ],
+      "arguments": {
+        "get_device_status": {
+          "device_id": "PLC-001"
+        },
+        "search_maintenance_manual": {
+          "query": "PLC-001 温度过高 处理方法",
+          "top_k": null
+        }
+      },
+      "planning_latency_ms": 1834.98,
+      "planner_error": null,
+      "intent_ok": true,
+      "tools_ok": true,
+      "success": true,
+      "success_rule": "intent match AND tool set match"
+    },
+    {
+      "category": "multi_tool",
+      "case_id": "mt-001",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": [
+        "get_device_status",
+        "query_alarm_code",
+        "search_maintenance_manual"
+      ],
+      "actual_intent": "alarm_diagnosis",
+      "actual_tools": [
+        "query_alarm_code",
+        "get_device_status",
+        "search_maintenance_manual"
+      ],
+      "arguments": {
+        "query_alarm_code": {
+          "alarm_code": "E0071"
+        },
+        "get_device_status": {
+          "device_id": "Robot-001"
+        },
+        "search_maintenance_manual": {
+          "query": "Robot-001 E0071 alarm handling maintenance procedure",
+          "top_k": 5
+        }
+      },
+      "planning_latency_ms": 2122.048,
+      "planner_error": null,
+      "intent_ok": true,
+      "tools_ok": true,
+      "success": true,
+      "success_rule": "intent match AND tool set match"
+    },
+    {
+      "category": "ood",
+      "case_id": "ood-001",
+      "expected_intent": null,
+      "expected_tools": [],
+      "actual_intent": "unknown",
+      "actual_tools": [],
+      "arguments": {},
+      "planning_latency_ms": 854.727,
+      "planner_error": null,
+      "intent_ok": false,
+      "tools_ok": true,
+      "success": true,
+      "ood_silent": true,
+      "success_rule": "ood: silent (no tool selected)"
+    }
+  ],
+  "passed": 5,
+  "total": 5,
+  "systemic_errors": [],
+  "success_definition": {
+    "non_ood": "intent equals expected_intent AND selected tool set equals expected_tools",
+    "ood": "silent, meaning no tool was selected (intent is not scored, matching the evaluator)"
+  }
+}

@@ -1,0 +1,189 @@
+{
+  "schema_version": "1.0",
+  "status": "OK",
+  "metrics": {
+    "intent_accuracy": 0.975609756097561,
+    "tool_selection_exact_match": 0.8163265306122449,
+    "tool_precision": 0.9393939393939394,
+    "tool_recall": 0.9253731343283582,
+    "argument_accuracy": 1.0,
+    "invalid_tool_rate": 0.0,
+    "unnecessary_tool_call_rate": 0.06060606060606061,
+    "task_success_rate": 0.7959183673469388,
+    "planner_failure_rate": 0.0,
+    "average_planning_latency_ms": 1551.9428571428573,
+    "execution_error_rate": null
+  },
+  "denominators": {
+    "total_cases": 49,
+    "in_scope_cases": 41,
+    "ood_cases": 8,
+    "intent_evaluated_cases": 41,
+    "intent_correct_cases": 40,
+    "tool_exact_match_cases": 40,
+    "expected_tool_selections": 67,
+    "selected_tool_selections": 66,
+    "tool_true_positive": 62,
+    "tool_false_positive": 4,
+    "tool_false_negative": 5,
+    "invalid_tool_selections": 0,
+    "unnecessary_tool_selections": 4,
+    "argument_checks_total": 37,
+    "argument_checks_passed": 37,
+    "task_success_cases": 39,
+    "planner_failure_cases": 0,
+    "execution_error_cases": 0,
+    "executed_cases": 0,
+    "planning_latency_samples": 49
+  },
+  "latency_ms": {
+    "planning_latency_ms": {
+      "sampled_cases": 49,
+      "average_ms": 1551.9428571428573,
+      "median_ms": 1406.179,
+      "p95_ms": 2365.4465999999998,
+      "min_ms": 502.204,
+      "max_ms": 3050.493
+    },
+    "execution_latency_ms": {
+      "sampled_cases": 0,
+      "average_ms": null,
+      "median_ms": null,
+      "p95_ms": null,
+      "min_ms": null,
+      "max_ms": null
+    },
+    "rag_latency_ms": {
+      "sampled_cases": 0,
+      "average_ms": null,
+      "median_ms": null,
+      "p95_ms": null,
+      "min_ms": null,
+      "max_ms": null
+    },
+    "total_latency_ms": {
+      "sampled_cases": 49,
+      "average_ms": 1551.9428571428573,
+      "median_ms": 1406.179,
+      "p95_ms": 2365.4465999999998,
+      "min_ms": 502.204,
+      "max_ms": 3050.493
+    }
+  },
+  "categories": {
+    "device_status": {
+      "case_count": 8,
+      "tool_exact_match_count": 7,
+      "task_success_count": 7,
+      "task_success_rate": 0.875
+    },
+    "alarm_diagnosis": {
+      "case_count": 8,
+      "tool_exact_match_count": 5,
+      "task_success_count": 5,
+      "task_success_rate": 0.625
+    },
+    "maintenance_advice": {
+      "case_count": 6,
+      "tool_exact_match_count": 2,
+      "task_success_count": 2,
+      "task_success_rate": 0.3333333333333333
+    },
+    "rag_only": {
+      "case_count": 6,
+      "tool_exact_match_count": 6,
+      "task_success_count": 6,
+      "task_success_rate": 1.0
+    },
+    "multi_tool": {
+      "case_count": 8,
+      "tool_exact_match_count": 7,
+      "task_success_count": 6,
+      "task_success_rate": 0.75
+    },
+    "ambiguous": {
+      "case_count": 5,
+      "tool_exact_match_count": 5,
+      "task_success_count": 5,
+      "task_success_rate": 1.0
+    },
+    "ood": {
+      "case_count": 8,
+      "tool_exact_match_count": 8,
+      "task_success_count": 8,
+      "task_success_rate": 1.0
+    }
+  },
+  "ood_safety": {
+    "case_count": 8,
+    "silent_case_count": 8,
+    "tool_call_case_count": 0,
+    "tool_call_rate": 0.0,
+    "offending_case_ids": []
+  },
+  "planner_runtime": {
+    "planner_used_counts": {
+      "llm": 49
+    },
+    "fallback_case_count": 0,
+    "fallback_reason_counts": {},
+    "planning_error_counts": {},
+    "provider": {
+      "provider_id": "openai_compatible",
+      "base_url": "https://api.deepseek.com",
+      "model": "deepseek-flash"
+    }
+  },
+  "run": {
+    "generated_at": "2026-09-15T09:19:07+00:00",
+    "dataset_path": "D:\\industrial-maintenance-agent\\evaluation\\dataset.json",
+    "dataset_sha256": "af873b6c28bd44186dd580369b3120f9b8b4c5d6d1c13ec4a55e0f72d220f0b7",
+    "dataset_case_count": 49,
+    "dataset_category_counts": {
+      "device_status": 8,
+      "alarm_diagnosis": 8,
+      "maintenance_advice": 6,
+      "rag_only": 6,
+      "multi_tool": 8,
+      "ambiguous": 5,
+      "ood": 8
+    },
+    "planner_mode": "llm",
+    "run_mode": "planner_only",
+    "execute_tools": false,
+    "known_tools": [
+      "get_device_status",
+      "query_alarm_code",
+      "search_maintenance_manual"
+    ],
+    "app_version": "0.7.0",
+    "python_version": "3.11.9",
+    "git_commit": "805411b5d7c59266f5ab3bbb13799472a8f925b6",
+    "git_worktree_dirty": true,
+    "database_url": "sqlite:///./data/industrial_maintenance.db",
+    "rag_provider_available": false,
+    "rag_provider_id": null
+  },
+  "definitions": {
+    "intent_accuracy": "Cases whose planned intent equals the expected intent, over all non-out-of-domain cases. A case whose planning failed counts as incorrect. The denominator is the non-out-of-domain case count, so the value is null only when the dataset holds no such case.",
+    "tool_selection_exact_match": "Cases whose planned tool set equals the expected tool set, over all cases. An out-of-domain case matches exactly when no tool was planned.",
+    "tool_precision": "True-positive tool selections over all selected tools, pooled across cases (micro average). Null when no tool was selected anywhere, because precision over an empty selection is undefined rather than perfect.",
+    "tool_recall": "True-positive tool selections over all expected tools, pooled across cases. Null when the dataset expects no tool at all.",
+    "argument_accuracy": "Declared-argument checks that passed, over all checks. A check exists for each case and tool where the case declares expected arguments and the planner selected that tool. A tool that was expected but not selected produces no check; tool recall already penalises it. Null when no check exists.",
+    "invalid_tool_rate": "Selected tool names absent from the registry, over all selected tools. Null when no tool was selected.",
+    "unnecessary_tool_call_rate": "Selected tools the case did not expect, over all selected tools. Null when no tool was selected.",
+    "task_success_rate": "Cases whose plan is fully correct: intent right, tool set exactly right, every declared argument right, no invalid tool, planning did not fail. Execution outcomes are reported separately.",
+    "planner_failure_rate": "Cases where planning raised, over all cases. Null only when the dataset is empty.",
+    "average_planning_latency_ms": "Mean wall time of the understanding and planning step, over cases where it was measured. Null when nothing was measured.",
+    "execution_error_rate": "Cases where a planned tool reported an error or raised, over cases where tools were executed. Only present in an end-to-end run."
+  },
+  "limitations": [
+    "Task success is judged on the plan, not on execution. Execution outcomes are reported through execution_error_rate and the failure records.",
+    "Out-of-domain cases are excluded from intent accuracy, because there is no maintenance intent to classify. Their signal is ood_safety.",
+    "Retrieval latency covers only the retrieval call, measured by a timing wrapper installed by this harness. A series with no samples is null.",
+    "Argument accuracy is conditioned on the tool being selected; a tool that was expected but not selected lowers tool recall instead.",
+    "Every metric whose denominator is zero is reported as null, never as zero or one. See denominators for the underlying counts.",
+    "This is a planner-only run. No tool ran, so execution and retrieval latency are null and execution_error_rate is not applicable.",
+    "No retrieval provider could be built in this environment, so the manual search tool reports unavailability and retrieval latency stays null even in an end-to-end run."
+  ]
+}

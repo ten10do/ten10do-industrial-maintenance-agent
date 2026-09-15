@@ -1,0 +1,240 @@
+{
+  "schema_version": "1.0",
+  "planner_mode": "llm",
+  "run_mode": "end_to_end",
+  "subset_size": 12,
+  "provider": {
+    "provider_id": "openai_compatible",
+    "base_url": "https://api.deepseek.com",
+    "model": "deepseek-flash"
+  },
+  "model": "deepseek-flash",
+  "rag_provider_id": null,
+  "note": "E2E subset. Not part of planner-only comparison.",
+  "cases": [
+    {
+      "case_id": "ds-001",
+      "category": "device_status",
+      "query": "PLC-001 现在什么状态",
+      "intent": "device_status",
+      "tools": [
+        "get_device_status"
+      ],
+      "planning_latency_ms": 1784.093,
+      "execution_latency_ms": 9.728,
+      "rag_latency_ms": null,
+      "total_latency_ms": 1793.885,
+      "evidence_count": 1,
+      "execution_error": false,
+      "execution_errors": [],
+      "answer_present": true
+    },
+    {
+      "case_id": "ds-002",
+      "category": "device_status",
+      "query": "灌装线PLC 运行温度是多少",
+      "intent": "device_status",
+      "tools": [
+        "get_device_status",
+        "search_maintenance_manual"
+      ],
+      "planning_latency_ms": 2473.779,
+      "execution_latency_ms": 0.625,
+      "rag_latency_ms": null,
+      "total_latency_ms": 2474.443,
+      "evidence_count": 1,
+      "execution_error": true,
+      "execution_errors": [
+        "search_maintenance_manual: RAG repo root is required for the local provider."
+      ],
+      "answer_present": true
+    },
+    {
+      "case_id": "ad-001",
+      "category": "alarm_diagnosis",
+      "query": "包装线PLC报警F0045怎么办",
+      "intent": "alarm_diagnosis",
+      "tools": [
+        "query_alarm_code",
+        "get_device_status",
+        "search_maintenance_manual"
+      ],
+      "planning_latency_ms": 1457.557,
+      "execution_latency_ms": 1.27,
+      "rag_latency_ms": null,
+      "total_latency_ms": 1458.875,
+      "evidence_count": 2,
+      "execution_error": true,
+      "execution_errors": [
+        "search_maintenance_manual: RAG repo root is required for the local provider."
+      ],
+      "answer_present": true
+    },
+    {
+      "case_id": "ad-002",
+      "category": "alarm_diagnosis",
+      "query": "F0112 是什么意思",
+      "intent": "alarm_diagnosis",
+      "tools": [
+        "query_alarm_code"
+      ],
+      "planning_latency_ms": 1260.571,
+      "execution_latency_ms": 0.555,
+      "rag_latency_ms": null,
+      "total_latency_ms": 1261.167,
+      "evidence_count": 1,
+      "execution_error": false,
+      "execution_errors": [],
+      "answer_present": true
+    },
+    {
+      "case_id": "ma-001",
+      "category": "maintenance_advice",
+      "query": "PLC-001 温度过高怎么处理",
+      "intent": "maintenance_advice",
+      "tools": [
+        "get_device_status",
+        "search_maintenance_manual"
+      ],
+      "planning_latency_ms": 1319.431,
+      "execution_latency_ms": 0.692,
+      "rag_latency_ms": null,
+      "total_latency_ms": 1320.169,
+      "evidence_count": 1,
+      "execution_error": true,
+      "execution_errors": [
+        "search_maintenance_manual: RAG repo root is required for the local provider."
+      ],
+      "answer_present": true
+    },
+    {
+      "case_id": "ma-002",
+      "category": "maintenance_advice",
+      "query": "包装线PLC 的保养周期是多久",
+      "intent": "maintenance_advice",
+      "tools": [
+        "search_maintenance_manual"
+      ],
+      "planning_latency_ms": 1535.167,
+      "execution_latency_ms": 0.035,
+      "rag_latency_ms": null,
+      "total_latency_ms": 1535.222,
+      "evidence_count": 0,
+      "execution_error": true,
+      "execution_errors": [
+        "search_maintenance_manual: RAG repo root is required for the local provider."
+      ],
+      "answer_present": true
+    },
+    {
+      "case_id": "ro-001",
+      "category": "rag_only",
+      "query": "变频器直流母线过压一般是什么原因导致的",
+      "intent": "maintenance_advice",
+      "tools": [
+        "search_maintenance_manual"
+      ],
+      "planning_latency_ms": 1114.351,
+      "execution_latency_ms": 0.034,
+      "rag_latency_ms": null,
+      "total_latency_ms": 1114.404,
+      "evidence_count": 0,
+      "execution_error": true,
+      "execution_errors": [
+        "search_maintenance_manual: RAG repo root is required for the local provider."
+      ],
+      "answer_present": true
+    },
+    {
+      "case_id": "ro-002",
+      "category": "rag_only",
+      "query": "伺服驱动器过载保护阈值如何设置",
+      "intent": "maintenance_advice",
+      "tools": [
+        "search_maintenance_manual"
+      ],
+      "planning_latency_ms": 1029.557,
+      "execution_latency_ms": 0.046,
+      "rag_latency_ms": null,
+      "total_latency_ms": 1029.632,
+      "evidence_count": 0,
+      "execution_error": true,
+      "execution_errors": [
+        "search_maintenance_manual: RAG repo root is required for the local provider."
+      ],
+      "answer_present": true
+    },
+    {
+      "case_id": "mt-001",
+      "category": "multi_tool",
+      "query": "Robot-001 报 E0071，现在状态怎么样，具体怎么处理",
+      "intent": "alarm_diagnosis",
+      "tools": [
+        "get_device_status",
+        "query_alarm_code",
+        "search_maintenance_manual"
+      ],
+      "planning_latency_ms": 1692.74,
+      "execution_latency_ms": 1.553,
+      "rag_latency_ms": null,
+      "total_latency_ms": 1694.363,
+      "evidence_count": 2,
+      "execution_error": true,
+      "execution_errors": [
+        "search_maintenance_manual: RAG repo root is required for the local provider."
+      ],
+      "answer_present": true
+    },
+    {
+      "case_id": "mt-002",
+      "category": "multi_tool",
+      "query": "焊接机器人报警 E0071 了，请给出排查步骤",
+      "intent": "alarm_diagnosis",
+      "tools": [
+        "query_alarm_code",
+        "get_device_status",
+        "search_maintenance_manual"
+      ],
+      "planning_latency_ms": 2921.502,
+      "execution_latency_ms": 0.956,
+      "rag_latency_ms": null,
+      "total_latency_ms": 2922.505,
+      "evidence_count": 2,
+      "execution_error": true,
+      "execution_errors": [
+        "search_maintenance_manual: RAG repo root is required for the local provider."
+      ],
+      "answer_present": true
+    },
+    {
+      "case_id": "ood-001",
+      "category": "ood",
+      "query": "今天北京天气怎么样",
+      "intent": "unknown",
+      "tools": [],
+      "planning_latency_ms": 951.342,
+      "execution_latency_ms": 0.006,
+      "rag_latency_ms": null,
+      "total_latency_ms": 951.363,
+      "evidence_count": 0,
+      "execution_error": false,
+      "execution_errors": [],
+      "answer_present": true
+    },
+    {
+      "case_id": "ood-002",
+      "category": "ood",
+      "query": "帮我写一首关于秋天的诗",
+      "intent": "unknown",
+      "tools": [],
+      "planning_latency_ms": 1245.2,
+      "execution_latency_ms": 0.002,
+      "rag_latency_ms": null,
+      "total_latency_ms": 1245.214,
+      "evidence_count": 0,
+      "execution_error": false,
+      "execution_errors": [],
+      "answer_present": true
+    }
+  ]
+}
