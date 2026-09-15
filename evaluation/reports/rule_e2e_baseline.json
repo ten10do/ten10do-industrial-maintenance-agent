@@ -11,7 +11,7 @@
     "unnecessary_tool_call_rate": 0.12,
     "task_success_rate": 0.7959183673469388,
     "planner_failure_rate": 0.0,
-    "average_planning_latency_ms": 0.2609591836734695,
+    "average_planning_latency_ms": 0.24797959183673465,
     "execution_error_rate": 0.673469387755102
   },
   "denominators": {
@@ -39,23 +39,35 @@
   "latency_ms": {
     "planning_latency_ms": {
       "sampled_cases": 49,
-      "average_ms": 0.2609591836734695,
-      "median_ms": 0.255
+      "average_ms": 0.24797959183673465,
+      "median_ms": 0.236,
+      "p95_ms": 0.32819999999999994,
+      "min_ms": 0.193,
+      "max_ms": 0.513
     },
     "execution_latency_ms": {
       "sampled_cases": 49,
-      "average_ms": 0.327081632653061,
-      "median_ms": 0.275
+      "average_ms": 0.3123673469387755,
+      "median_ms": 0.265,
+      "p95_ms": 0.6125999999999998,
+      "min_ms": 0.001,
+      "max_ms": 3.687
     },
     "rag_latency_ms": {
       "sampled_cases": 0,
       "average_ms": null,
-      "median_ms": null
+      "median_ms": null,
+      "p95_ms": null,
+      "min_ms": null,
+      "max_ms": null
     },
     "total_latency_ms": {
       "sampled_cases": 49,
-      "average_ms": 0.6197142857142858,
-      "median_ms": 0.575
+      "average_ms": 0.5914693877551018,
+      "median_ms": 0.555,
+      "p95_ms": 0.8979999999999997,
+      "min_ms": 0.206,
+      "max_ms": 4.268
     }
   },
   "categories": {
@@ -123,7 +135,7 @@
     "provider": null
   },
   "run": {
-    "generated_at": "2026-09-15T06:59:44+00:00",
+    "generated_at": "2026-09-15T08:12:18+00:00",
     "dataset_path": "D:\\industrial-maintenance-agent\\evaluation\\dataset.json",
     "dataset_sha256": "af873b6c28bd44186dd580369b3120f9b8b4c5d6d1c13ec4a55e0f72d220f0b7",
     "dataset_case_count": 49,
@@ -144,9 +156,9 @@
       "query_alarm_code",
       "search_maintenance_manual"
     ],
-    "app_version": "0.6.0",
+    "app_version": "0.7.0",
     "python_version": "3.11.9",
-    "git_commit": "3f042a62f75ff1f21df7cd032caea39bceeeb274",
+    "git_commit": "3147b3eedf47e978f394d636ddd0c5217a81aa90",
     "git_worktree_dirty": true,
     "database_url": "sqlite:///./data/industrial_maintenance.db",
     "rag_provider_available": false,

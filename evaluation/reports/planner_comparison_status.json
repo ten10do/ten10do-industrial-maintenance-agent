@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "status": "LLM_EVALUATION_NOT_RUN",
+  "generated_at": "2026-09-15T08:12:23+00:00",
+  "reason": "no successful LLM baseline exists at D:\\industrial-maintenance-agent\\evaluation\\reports\\llm_baseline.json. Run the LLM benchmark first; a comparison cannot be approximated from the rule side.",
+  "rule_report": "D:\\industrial-maintenance-agent\\evaluation\\reports\\rule_baseline.json",
+  "llm_report": "D:\\industrial-maintenance-agent\\evaluation\\reports\\llm_baseline.json",
+  "llm_report_exists": false,
+  "dataset_sha256": "af873b6c28bd44186dd580369b3120f9b8b4c5d6d1c13ec4a55e0f72d220f0b7",
+  "rule_dataset_sha256": "af873b6c28bd44186dd580369b3120f9b8b4c5d6d1c13ec4a55e0f72d220f0b7",
+  "llm_dataset_sha256": null,
+  "required_command": [
+    "python",
+    "-m",
+    "evaluation.runner",
+    "--planner",
+    "llm",
+    "--dataset",
+    "evaluation/dataset.json"
+  ],
+  "metrics": null
+}

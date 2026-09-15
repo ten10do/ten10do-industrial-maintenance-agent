@@ -64,6 +64,7 @@ from evaluation.metrics import (
     mean,
     median,
     missing_tools,
+    percentile,
     ratio,
     tool_counts,
     unnecessary_tools,
@@ -81,6 +82,9 @@ from evaluation.runner import (
 DEVICE_TOOL = "get_device_status"
 ALARM_TOOL = "query_alarm_code"
 MANUAL_TOOL = "search_maintenance_manual"
+
+#: Where the recorded baselines live. Used to lock an artefact to its dataset.
+REPORTS_DIR = Path(__file__).resolve().parents[1] / "evaluation" / "reports"
 
 #: The registry as the shipped application defines it. Passed explicitly so the
 #: evaluator's "is this a real tool" question is answered the same way every run.
@@ -183,6 +187,36 @@ def test_median_handles_odd_and_even_samples() -> None:
     assert median([1.0, 2.0, 3.0, 4.0]) == 2.5
 
 
+def test_percentile_interpolates_between_order_statistics() -> None:
+    assert percentile([1.0, 2.0, 3.0, 4.0, 5.0], 50) == 3.0
+    assert percentile([1.0, 2.0, 3.0, 4.0], 50) == 2.5
+    assert percentile([1.0, 2.0, 3.0, 4.0], 0) == 1.0
+    assert percentile([1.0, 2.0, 3.0, 4.0], 100) == 4.0
+
+
+def test_percentile_reports_none_for_an_empty_sample() -> None:
+    assert percentile([], 95) is None
+
+
+def test_percentile_of_a_single_sample_is_that_sample() -> None:
+    assert percentile([7.5], 95) == 7.5
+
+
+def test_percentile_rejects_a_percentage_outside_its_range() -> None:
+    with pytest.raises(ValueError):
+        percentile([1.0], 101.0)
+    with pytest.raises(ValueError):
+        percentile([1.0], -1.0)
+
+
+def test_p95_follows_the_documented_linear_interpolation() -> None:
+    # 49 samples, p95: rank = 48 * 0.95 = 45.6, so the value sits between the
+    # 46th and 47th order statistics. Pinned because a percentile has several
+    # conventions and a moved convention would move the reported tail.
+    values = [float(value) for value in range(1, 50)]
+    assert percentile(values, 95) == pytest.approx(46.6)
+
+
 def test_tool_counts_treats_selection_as_a_set() -> None:
     # Order is not scored, and a duplicate mention neither helps nor hurts.
     assert tool_counts([DEVICE_TOOL, ALARM_TOOL], [ALARM_TOOL, DEVICE_TOOL]) == (2, 0, 0)
@@ -220,6 +254,22 @@ def test_argument_values_match_passes_vacuously_when_nothing_is_declared() -> No
 # --------------------------------------------------------------------------- #
 # Per-case evaluation
 # --------------------------------------------------------------------------- #
+
+
+def test_the_failure_taxonomy_is_complete_and_ordered() -> None:
+    # The priority tuple is what decides the single headline failure per case, so a
+    # type that exists but is missing from it would silently lose its voice.
+    assert set(FAILURE_PRIORITY) == {
+        FAILURE_PLANNING_ERROR,
+        FAILURE_INVALID_TOOL,
+        FAILURE_OOD_TOOL_CALL,
+        FAILURE_MISSING_TOOL,
+        FAILURE_UNNECESSARY_TOOL,
+        FAILURE_INTENT_MISMATCH,
+        FAILURE_ARGUMENT_MISMATCH,
+        FAILURE_EXECUTION_ERROR,
+    }
+    assert len(FAILURE_PRIORITY) == len(set(FAILURE_PRIORITY))
 
 
 def test_a_correct_plan_succeeds_and_records_no_failure() -> None:
@@ -578,6 +628,56 @@ def test_a_latency_series_with_no_samples_is_null_not_zero() -> None:
     assert latency["rag_latency_ms"].median_ms is None
 
 
+def test_an_unmeasured_latency_series_is_null_across_every_statistic() -> None:
+    outcome = evaluate_case(
+        make_case(),
+        runner_module.PlanObservation(
+            intent="device_status",
+            tools=[DEVICE_TOOL],
+            arguments={DEVICE_TOOL: {"device_id": "PLC-001"}},
+        ),
+        known_tools=KNOWN_TOOLS,
+    )
+
+    _, _, latency, _, _ = aggregate([outcome], executed=True)
+
+    rag = latency["rag_latency_ms"]
+    assert rag.sampled_cases == 0
+    # A tail or an extreme that was never measured reads as null, never as zero.
+    assert rag.average_ms is None
+    assert rag.median_ms is None
+    assert rag.p95_ms is None
+    assert rag.min_ms is None
+    assert rag.max_ms is None
+
+
+def test_latency_summaries_report_mean_median_p95_min_and_max() -> None:
+    outcomes = [
+        evaluate_case(
+            make_case(id=f"lat-{index}"),
+            runner_module.PlanObservation(
+                intent="device_status",
+                tools=[DEVICE_TOOL],
+                arguments={DEVICE_TOOL: {"device_id": "PLC-001"}},
+                planning_latency_ms=latency,
+            ),
+            known_tools=KNOWN_TOOLS,
+        )
+        for index, latency in enumerate([10.0, 20.0, 30.0, 40.0, 100.0])
+    ]
+
+    _, _, series, _, _ = aggregate(outcomes, executed=False)
+    planning = series["planning_latency_ms"]
+
+    assert planning.sampled_cases == 5
+    assert planning.average_ms == pytest.approx(40.0)
+    assert planning.median_ms == pytest.approx(30.0)
+    assert planning.min_ms == 10.0
+    assert planning.max_ms == 100.0
+    # rank = 4 * 0.95 = 3.8, so the p95 sits 80 percent of the way from 40 to 100.
+    assert planning.p95_ms == pytest.approx(88.0)
+
+
 def test_per_category_success_is_reported_separately_from_the_total() -> None:
     good = evaluate_case(
         make_case(id="c-1"),
@@ -693,6 +793,16 @@ def test_the_dataset_hash_is_stable_and_report_ready() -> None:
     assert len(digest) == 64
     assert all(character in "0123456789abcdef" for character in digest)
     assert digest == dataset_sha256(DEFAULT_DATASET_PATH)
+
+
+def test_the_recorded_rule_baseline_is_locked_to_the_shipped_dataset() -> None:
+    recorded = json.loads((REPORTS_DIR / "rule_baseline.json").read_text(encoding="utf-8"))
+
+    # A baseline is evidence only while it names this exact dataset. If the dataset
+    # is edited, this fails before a new planner can be compared against numbers
+    # that were measured on different questions.
+    assert recorded["run"]["dataset_sha256"] == dataset_sha256(DEFAULT_DATASET_PATH)
+    assert recorded["run"]["dataset_case_count"] == len(load_dataset().cases)
 
 
 def test_the_intent_vocabulary_comes_from_the_parser() -> None:

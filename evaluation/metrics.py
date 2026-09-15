@@ -12,6 +12,7 @@ be tested directly instead of through a pipeline run.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 #: A metric value. ``None`` means the denominator was zero.
@@ -41,6 +42,34 @@ def median(values: list[float]) -> Metric:
     if len(ordered) % 2 == 1:
         return ordered[middle]
     return (ordered[middle - 1] + ordered[middle]) / 2
+
+
+def percentile(values: list[float], p: float) -> Metric:
+    """Return the ``p``-th percentile, or ``None`` for an empty sample.
+
+    ``p`` is a percentage between 0 and 100. The value is interpolated linearly
+    between the two neighbouring order statistics, which is the definition
+    ``numpy.percentile`` uses by default. Stating it matters because a percentile
+    has several conventions and a latency tail has to be comparable across runs:
+    the nearest-rank convention would report a different p95 for the same sample.
+
+    Raises:
+        ValueError: ``p`` is outside ``[0, 100]``.
+    """
+    if not 0 <= p <= 100:
+        raise ValueError(f"percentile requires 0 <= p <= 100, got {p}")
+    if not values:
+        return None
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    rank = (len(ordered) - 1) * (p / 100)
+    low = math.floor(rank)
+    high = math.ceil(rank)
+    if low == high:
+        return ordered[low]
+    weight = rank - low
+    return ordered[low] * (1 - weight) + ordered[high] * weight
 
 
 def tool_counts(expected: list[str], predicted: list[str]) -> tuple[int, int, int]:
@@ -104,6 +133,7 @@ __all__ = [
     "mean",
     "median",
     "missing_tools",
+    "percentile",
     "ratio",
     "tool_counts",
     "unnecessary_tools",

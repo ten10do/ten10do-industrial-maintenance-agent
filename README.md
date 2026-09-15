@@ -26,6 +26,13 @@ accuracy, tool selection and argument handling are quantified instead of assumed
 The baseline is produced by running the real planner over the real dataset. No stub
 is scored, and no number is reported that was not measured.
 
+V0.7 extends that framework toward a real LLM planner benchmark. It adds a Rule
+versus LLM comparison that refuses to approximate, a latency distribution with a
+documented p95 convention, and the gate that stops a stub from standing in for a
+provider. The real run has not happened here: no provider is configured in this
+environment, so the LLM column stays empty and the gate reports
+`REAL_LLM_EVALUATION_NOT_RUN`. No LLM metric is estimated, inferred or invented.
+
 ## Stack
 
 | Concern       | Choice                                        |
@@ -97,12 +104,13 @@ industrial-maintenance-agent/
 │       ├── device_tool.py   # get_device_status (Device ORM backed)
 │       ├── alarm_tool.py    # query_alarm_code (data/alarms.json backed)
 │       └── maintenance_manual_tool.py  # search_maintenance_manual (RAG backed)
-├── evaluation/                  # The Agent evaluation framework (V0.6), the only one
+├── evaluation/                  # The Agent evaluation framework, the only one
 │   ├── dataset.json             # 49 hand-authored cases + ground-truth policy
 │   ├── dataset.py               # Dataset models and answer-key validation
 │   ├── metrics.py               # Metric primitives; a zero denominator is null
 │   ├── evaluator.py             # Per-case scoring and aggregation
 │   ├── runner.py                # CLI: planner-only / end-to-end, LLM gate
+│   ├── comparison.py            # CLI: rule versus LLM delta, refuses to approximate
 │   └── reports/                 # Generated baselines and failure records
 ├── tests/
 │   ├── test_health.py           # Smoke tests
@@ -119,7 +127,8 @@ industrial-maintenance-agent/
 │   ├── test_llm_provider.py     # Provider envelope, errors, credential safety
 │   ├── test_llm_planner.py      # Prompt, plan validation, error taxonomy
 │   ├── test_planner_modes.py    # rule / llm / auto, executor, API surface
-│   └── test_evaluation.py       # Dataset, metrics, OOD safety, CLI, LLM gate
+│   ├── test_evaluation.py       # Dataset, metrics, OOD safety, CLI, LLM gate
+│   └── test_planner_comparison.py  # rule vs LLM delta, refusals, hash lock
 ├── data/
 │   ├── devices.json         # Device seed data
 │   ├── alarms.json          # Alarm code catalog
@@ -784,6 +793,13 @@ rule planner over the real dataset once, and the checks then read that single
 report. That fixture is deliberate: the honest failures of the frozen baseline are
 pinned by case id, so a change that makes them pass fails the suite.
 
+`tests/test_planner_comparison.py` covers the comparison. It checks that the metric
+table keeps every metric including the ones where the LLM reads worse, that the delta
+sign is unambiguous on the `lower_is_better` metrics, that a mismatched dataset is
+refused with both hashes named, and that a missing LLM baseline produces a refusal
+instead of a file of nulls. No evaluation test contacts a provider, so the whole
+suite stays hermetic and runs without a credential.
+
 ### Manual check
 
 ```bash
@@ -793,7 +809,7 @@ curl -s -X POST http://127.0.0.1:8123/agent/invoke \
   -H "Content-Type: application/json" -d '{"query": "PLC-001 现在什么状态"}'
 ```
 
-## Agent evaluation (V0.6)
+## Agent evaluation (V0.6 and V0.7)
 
 A software test and an agent evaluation answer different questions, and this
 project keeps them apart. `pytest` can assert that the rule planner returns
@@ -902,11 +918,27 @@ cases, planner-only, dataset SHA-256 `af873b6c…`. These are recorded measureme
 | `unnecessary_tool_call_rate` | 0.1200 | 9 / 75 |
 | `task_success_rate` | 0.7959 | 39 / 49 |
 | `planner_failure_rate` | 0.0000 | 0 / 49 |
-| `average_planning_latency_ms` | 0.22 to 0.29 | 49 samples |
+| `average_planning_latency_ms` | 0.24 | 49 samples |
 
 For a fixed dataset and planner the nine behavioural metrics above are
 deterministic. Planning latency is wall time on this machine and moves by a few
-hundredths of a millisecond between runs, so it is quoted as a range.
+hundredths of a millisecond between runs, so the recorded distribution is published
+instead of a single figure.
+
+| Statistic | `planning_latency_ms` |
+| --------- | --------------------- |
+| samples | 49 |
+| mean | 0.240 |
+| median | 0.215 |
+| p95 | 0.337 |
+| min | 0.184 |
+| max | 0.496 |
+
+The p95 interpolates between order statistics, the convention
+`evaluation.metrics.percentile` documents, because a moved convention would move the
+reported tail. This series covers planner time only: tool execution, retrieval and
+HTTP API latency are excluded. In a planner-only run execution and retrieval latency
+have no samples, so every one of their statistics is `null`, never zero.
 
 In an end-to-end run the planning metrics are identical, and
 `execution_error_rate` is 0.6735 (33 / 49). That figure describes the environment
@@ -936,26 +968,98 @@ These cases are pinned by identifier in `tests/test_evaluation.py`. A change tha
 makes them pass fails that suite, which is the intended reading: the answer key
 moved.
 
-### LLM Evaluation: NOT RUN
+### Rule versus LLM planner evaluation
 
-**LLM Evaluation: NOT RUN.** No provider is configured in this environment, so no
-LLM planner has been benchmarked and no LLM number appears anywhere in this
-README.
+Both planners are measured on one frozen dataset. The dataset holds **49 cases** and
+its SHA-256 is **`af873b6c28bd44186dd580369b3120f9b8b4c5d6d1c13ec4a55e0f72d220f0b7`**.
+The recorded rule baseline was produced from that exact file, and
+`tests/test_evaluation.py` fails if the shipped dataset ever stops matching the hash
+the baseline names. Nothing here is comparable across a dataset change.
 
-`--planner llm` and `--planner auto` detect the missing provider and write a gate
-report with `status: "LLM_EVALUATION_NOT_RUN"` and `metrics: null`, then exit 0.
-They do not quietly run the rule planner under an LLM label, and no stub or
-fabricated score is produced. The gate names the three variables a real run needs:
-`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`. Given those, the same command produces
-the same ten metrics for the LLM planner, and the comparison becomes a real one.
+**LLM Evaluation: NOT RUN.** No provider is configured in this environment, so the
+LLM column below is empty and no LLM number appears anywhere in this README. The
+provider and model name cannot be stated because none was used.
+
+| Metric | Rule planner | LLM planner |
+| ------ | ------------ | ----------- |
+| `intent_accuracy` | 0.9756 (40/41) | not measured |
+| `tool_selection_exact_match` | 0.7959 (39/49) | not measured |
+| `tool_precision` | 0.8800 (66/75) | not measured |
+| `tool_recall` | 0.9851 (66/67) | not measured |
+| `argument_accuracy` | 1.0000 (42/42) | not measured |
+| `invalid_tool_rate` | 0.0000 (0/75) | not measured |
+| `unnecessary_tool_call_rate` | 0.1200 (9/75) | not measured |
+| `task_success_rate` | 0.7959 (39/49) | not measured |
+| `planner_failure_rate` | 0.0000 (0/49) | not measured |
+| `average_planning_latency_ms` | 0.240 (49 samples) | not measured |
+| `planning_latency_ms` p95 | 0.337 | not measured |
+
+No claim of improvement is made, because no measurement supports one. The rule column
+is the whole of the evidence.
+
+Failures, rule planner. Ten cases, and one known weakness explains all of them.
+
+| Primary failure type | Cases |
+| -------------------- | ----- |
+| `unnecessary_tool` | 6: `ad-002`, `ad-004`, `ad-006`, `ad-008`, `mt-007`, `am-004` |
+| `missing_tool` | 1: `ro-003`, which also carries `intent_mismatch` |
+| `unexpected_tool_call_on_ood` | 3: `ood-006`, `ood-007`, `ood-008` |
+
+Failures, LLM planner: not measured.
+
+Out-of-domain performance, rule planner, over the 8 out-of-domain cases.
+
+| OOD measure | Rule planner | LLM planner |
+| ----------- | ------------ | ----------- |
+| `tool_call_rate` | 0.375 (3/8) | not measured |
+| `unnecessary_tool_call_rate` | 0.375 (3/8, same number by construction) | not measured |
+| silent cases | 5 | not measured |
+| offending cases | `ood-006`, `ood-007`, `ood-008` | not measured |
+
+The two out-of-domain rates are one number, not two. An out-of-domain case expects
+no tool, so every selected tool is by definition unnecessary and the two rates
+coincide. The dataset-wide `unnecessary_tool_call_rate` in the table above covers all
+49 cases and is a different quantity.
+
+To produce the LLM column:
+
+```bash
+# 1. Configure a provider. Names only; the values are never logged or committed.
+#    LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
+
+# 2. Benchmark the real LLM planner, planner-only, over the same frozen dataset.
+python -m evaluation.runner --planner llm --dataset evaluation/dataset.json
+
+# 3. Compare. Writes evaluation/reports/planner_comparison.json.
+python -m evaluation.comparison
+```
+
+Two gates protect the comparison. `evaluation.runner --planner llm` refuses to run
+without a provider, writes `llm_evaluation_status.json` with
+`status: "LLM_EVALUATION_NOT_RUN"` and `metrics: null`, and exits 0.
+`evaluation.comparison` then finds no successful LLM baseline, reports
+`LLM_EVALUATION_NOT_RUN`, exits 2, and writes **no** `planner_comparison.json`. Nulls
+are never published under a comparison heading.
+
+When a real baseline does exist, the comparison reports every metric from both sides
+and `delta = llm - rule`, and it never filters. The error rates and the planning
+latency carry a `lower_is_better` flag so a positive delta on those is not misread as
+an improvement. A delta whose value is `null` on either side has no verdict, because
+`null` means the metric was not measured for that planner. Two baselines measured on
+different datasets are refused with both hashes named. The rule side is read from the
+recorded artefact and is never re-run, so a more favourable draw cannot be selected
+after the fact.
+
+### Reports
 
 Reports are written to `evaluation/reports/`. A planner-only rule run writes
 `rule_baseline.json` and `rule_failures.json`, an end-to-end run writes
-`rule_e2e_baseline.json` and `rule_e2e_failures.json`, and a gated run writes
-`<planner>_evaluation_status.json`. Every report records the dataset path and
-SHA-256, the planner mode, the run mode, the git commit, the registry contents and
-the application version, so a number can always be traced back to the input that
-produced it.
+`rule_e2e_baseline.json` and `rule_e2e_failures.json`, a gated run writes
+`<planner>_evaluation_status.json`, and the comparison writes either
+`planner_comparison.json` or, when it refuses, `planner_comparison_status.json`. Every
+baseline records the dataset path and SHA-256, the planner mode, the run mode, the git
+commit, the registry contents and the application version, so a number can always be
+traced back to the input that produced it.
 
 ### Known limits
 
@@ -967,14 +1071,24 @@ produced it.
    that the synthesis step writes.
 3. **Eight out-of-domain cases can show a weakness, not bound its rate.** A larger
    adversarial set is the only way to turn `0.375` into a defensible estimate.
+4. **No LLM planner has been measured in this repository.** Every LLM cell above is
+   empty by design. The comparison tooling exists and is covered by tests, but while
+   no provider is configured there is nothing to compare and `planner_comparison.json`
+   is not produced. This limit is the reason the other limits stay unqualified.
+5. **One dataset and one run per planner.** A comparison over 49 hand-authored cases
+   bounds neither planner on other queries, and a single LLM run carries provider-side
+   variance that one baseline cannot express. A repeated run would be needed before
+   any latency claim about a provider.
 
 ## Roadmap
 
 1. Add device read endpoints backed by the `Device` model.
 2. Add an Alembic migration for schema versioning.
-3. Run the LLM evaluation once a provider is configured, and publish the LLM
-   column next to the rule baseline. Until then the gate reports
-   `LLM_EVALUATION_NOT_RUN`.
+3. Run the LLM evaluation once a provider is configured, then publish the LLM column
+   and the comparison next to the rule baseline: benchmark with
+   `python -m evaluation.runner --planner llm --dataset evaluation/dataset.json` and
+   compare with `python -m evaluation.comparison`. Until then the gate reports
+   `LLM_EVALUATION_NOT_RUN` and the comparison refuses rather than approximating.
 4. Reduce manual retrieval latency. Measured against the four-document Rockwell
    corpus (4219 chunks), a manual query costs about 4.9 s in steady state, and the
    first query in a fresh process costs about 7.3 s while the module import and

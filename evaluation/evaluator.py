@@ -33,6 +33,7 @@ from evaluation.metrics import (
     mean,
     median,
     missing_tools,
+    percentile,
     ratio,
     tool_counts,
     unnecessary_tools,
@@ -332,13 +333,22 @@ class CountSet(BaseModel):
 
 
 class LatencySummary(BaseModel):
-    """A latency series: how many cases were measured, and the centre."""
+    """A latency series: how many cases were measured, and its distribution.
+
+    ``p95_ms`` uses linear interpolation between order statistics, the definition
+    :func:`evaluation.metrics.percentile` documents. A tail figure without a
+    stated convention is not comparable between runs, so the convention is part
+    of the number.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     sampled_cases: int = 0
     average_ms: Metric = None
     median_ms: Metric = None
+    p95_ms: Metric = None
+    min_ms: Metric = None
+    max_ms: Metric = None
 
 
 class CategorySummary(BaseModel):
@@ -476,6 +486,9 @@ def _latency_summaries(
             sampled_cases=len(values),
             average_ms=mean(values),
             median_ms=median(values),
+            p95_ms=percentile(values, 95),
+            min_ms=min(values) if values else None,
+            max_ms=max(values) if values else None,
         )
 
     return dict(
