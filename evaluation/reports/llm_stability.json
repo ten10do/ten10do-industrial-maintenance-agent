@@ -1,0 +1,306 @@
+{
+  "schema_version": "1.0",
+  "status": "OK",
+  "generated_at": "2026-09-15T09:51:03+00:00",
+  "provider": {
+    "provider_id": "openai_compatible",
+    "base_url": "https://api.deepseek.com",
+    "model": "deepseek-flash"
+  },
+  "model": "deepseek-flash",
+  "planner_mode": "llm",
+  "run_mode": "planner_only",
+  "runs": [
+    "llm_repeat_run_01",
+    "llm_repeat_run_02",
+    "llm_repeat_run_03"
+  ],
+  "run_count": 3,
+  "dataset_sha256": "af873b6c28bd44186dd580369b3120f9b8b4c5d6d1c13ec4a55e0f72d220f0b7",
+  "dataset_case_count": 49,
+  "metrics": {
+    "intent_accuracy": {
+      "runs": [
+        0.975609756097561,
+        0.975609756097561,
+        0.9512195121951219
+      ],
+      "n": 3,
+      "mean": 0.96748,
+      "std": 0.011498,
+      "std_sample": 0.014082,
+      "min": 0.9512195121951219,
+      "max": 0.975609756097561,
+      "spread": 0.02439
+    },
+    "tool_selection_exact_match": {
+      "runs": [
+        0.8163265306122449,
+        0.7959183673469388,
+        0.7959183673469388
+      ],
+      "n": 3,
+      "mean": 0.802721,
+      "std": 0.009621,
+      "std_sample": 0.011783,
+      "min": 0.7959183673469388,
+      "max": 0.8163265306122449,
+      "spread": 0.020408
+    },
+    "tool_precision": {
+      "runs": [
+        0.9393939393939394,
+        0.9523809523809523,
+        0.9523809523809523
+      ],
+      "n": 3,
+      "mean": 0.948052,
+      "std": 0.006122,
+      "std_sample": 0.007498,
+      "min": 0.9393939393939394,
+      "max": 0.9523809523809523,
+      "spread": 0.012987
+    },
+    "tool_recall": {
+      "runs": [
+        0.9253731343283582,
+        0.8955223880597015,
+        0.8955223880597015
+      ],
+      "n": 3,
+      "mean": 0.905473,
+      "std": 0.014072,
+      "std_sample": 0.017234,
+      "min": 0.8955223880597015,
+      "max": 0.9253731343283582,
+      "spread": 0.029851
+    },
+    "argument_accuracy": {
+      "runs": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "n": 3,
+      "mean": 1.0,
+      "std": 0.0,
+      "std_sample": 0.0,
+      "min": 1.0,
+      "max": 1.0,
+      "spread": 0.0
+    },
+    "invalid_tool_rate": {
+      "runs": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "n": 3,
+      "mean": 0.0,
+      "std": 0.0,
+      "std_sample": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "spread": 0.0
+    },
+    "unnecessary_tool_call_rate": {
+      "runs": [
+        0.06060606060606061,
+        0.047619047619047616,
+        0.047619047619047616
+      ],
+      "n": 3,
+      "mean": 0.051948,
+      "std": 0.006122,
+      "std_sample": 0.007498,
+      "min": 0.047619047619047616,
+      "max": 0.06060606060606061,
+      "spread": 0.012987
+    },
+    "task_success_rate": {
+      "runs": [
+        0.7959183673469388,
+        0.7755102040816326,
+        0.7755102040816326
+      ],
+      "n": 3,
+      "mean": 0.782313,
+      "std": 0.009621,
+      "std_sample": 0.011783,
+      "min": 0.7755102040816326,
+      "max": 0.7959183673469388,
+      "spread": 0.020408
+    },
+    "planner_failure_rate": {
+      "runs": [
+        0.0,
+        0.0,
+        0.02040816326530612
+      ],
+      "n": 3,
+      "mean": 0.006803,
+      "std": 0.009621,
+      "std_sample": 0.011783,
+      "min": 0.0,
+      "max": 0.02040816326530612,
+      "spread": 0.020408
+    }
+  },
+  "latency_ms": {
+    "note": "Per-run planning-latency statistics are reported separately. Pooling every case of every run into one series would hide run-to-run drift and is deliberately not done.",
+    "per_run": [
+      {
+        "run": "llm_repeat_run_01",
+        "sampled_cases": 49,
+        "average_ms": 1384.7342653061223,
+        "median_ms": 1337.139,
+        "p95_ms": 2223.1657999999998,
+        "min_ms": 739.272,
+        "max_ms": 2642.069
+      },
+      {
+        "run": "llm_repeat_run_02",
+        "sampled_cases": 49,
+        "average_ms": 1459.6838367346936,
+        "median_ms": 1284.556,
+        "p95_ms": 2639.0855999999967,
+        "min_ms": 672.226,
+        "max_ms": 3800.598
+      },
+      {
+        "run": "llm_repeat_run_03",
+        "sampled_cases": 49,
+        "average_ms": 1386.8903877551024,
+        "median_ms": 1268.955,
+        "p95_ms": 2288.8767999999964,
+        "min_ms": 476.51,
+        "max_ms": 3849.728
+      }
+    ],
+    "across_runs": {
+      "runs": [
+        1384.734,
+        1459.684,
+        1386.89
+      ],
+      "mean_of_run_means": 1410.436,
+      "std_of_run_means": 34.834,
+      "min_of_run_min": 476.51,
+      "max_of_run_max": 3849.728
+    }
+  },
+  "ood_safety": {
+    "per_run": [
+      {
+        "run": "llm_repeat_run_01",
+        "case_count": 8,
+        "silent_case_count": 7,
+        "tool_call_rate": 0.125,
+        "offending_case_ids": [
+          "ood-006"
+        ]
+      },
+      {
+        "run": "llm_repeat_run_02",
+        "case_count": 8,
+        "silent_case_count": 8,
+        "tool_call_rate": 0.0,
+        "offending_case_ids": []
+      },
+      {
+        "run": "llm_repeat_run_03",
+        "case_count": 8,
+        "silent_case_count": 7,
+        "tool_call_rate": 0.125,
+        "offending_case_ids": [
+          "ood-008"
+        ]
+      }
+    ],
+    "across_runs": {
+      "runs": [
+        0.125,
+        0.0,
+        0.125
+      ],
+      "mean": 0.0833,
+      "std": 0.0589,
+      "min": 0.0,
+      "max": 0.125,
+      "offending_case_ids_union": [
+        "ood-006",
+        "ood-008"
+      ],
+      "any_run_clean": true
+    }
+  },
+  "token_usage": {
+    "per_run": [
+      {
+        "run": "llm_repeat_run_01",
+        "prompt_tokens": 44563,
+        "completion_tokens": 8456,
+        "total_tokens": 53019,
+        "cases_with_usage": 49,
+        "per_case_mean": {
+          "prompt_tokens": 909.45,
+          "completion_tokens": 172.57,
+          "total_tokens": 1082.02
+        }
+      },
+      {
+        "run": "llm_repeat_run_02",
+        "prompt_tokens": 44563,
+        "completion_tokens": 9637,
+        "total_tokens": 54200,
+        "cases_with_usage": 49,
+        "per_case_mean": {
+          "prompt_tokens": 909.45,
+          "completion_tokens": 196.67,
+          "total_tokens": 1106.12
+        }
+      },
+      {
+        "run": "llm_repeat_run_03",
+        "prompt_tokens": 44563,
+        "completion_tokens": 9095,
+        "total_tokens": 53658,
+        "cases_with_usage": 49,
+        "per_case_mean": {
+          "prompt_tokens": 909.45,
+          "completion_tokens": 185.61,
+          "total_tokens": 1095.06
+        }
+      }
+    ],
+    "across_runs": {
+      "run_totals": [
+        53019,
+        54200,
+        53658
+      ],
+      "three_run_total": {
+        "prompt_tokens": 133689,
+        "completion_tokens": 27188,
+        "total_tokens": 160877
+      },
+      "mean_per_run": {
+        "prompt_tokens": 44563.0,
+        "completion_tokens": 9062.7,
+        "total_tokens": 53625.7
+      },
+      "per_case_mean_across_runs": {
+        "prompt_tokens": 909.45,
+        "completion_tokens": 184.95,
+        "total_tokens": 1094.4
+      },
+      "cases_per_run": 49
+    }
+  },
+  "std_convention": "std is the population standard deviation over the runs (n=3); std_sample is the n-1 sample standard deviation.",
+  "limitations": [
+    "Three runs bound provider-side variance only weakly; they are not a confidence interval.",
+    "A single dataset and fixed temperature (0) shape both runs; other prompts or datasets are out of scope.",
+    "Token counts are provider-reported usage from these exact calls, not an estimate."
+  ]
+}

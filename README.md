@@ -943,10 +943,12 @@ HTTP API latency are excluded. In a planner-only run execution and retrieval lat
 have no samples, so every one of their statistics is `null`, never zero.
 
 In an end-to-end run the planning metrics are identical, and
-`execution_error_rate` is 0.6735 (33 / 49). That figure describes the environment
-rather than the planner. No retrieval provider can be built here, so the manual
-search tool reports unavailability, and retrieval latency stays `null` instead of
-being estimated.
+`execution_error_rate` is 0.6735 (33 / 49). That figure was measured before the local
+retrieval provider was configured, so it describes the environment of that run rather
+than the planner: the manual search tool reported unavailability and retrieval latency
+stayed `null` instead of being estimated. The retrieval provider is configured now, and
+the end-to-end subset below shows what the same pipeline measures after the fix. This
+rule baseline itself is left as recorded rather than re-run.
 
 Ten cases fail, and one known weakness explains all of them. The rule planner is
 keyword-driven, so it reaches for the manual search whenever a maintenance-sounding
@@ -1006,7 +1008,11 @@ rule planner selects. The price is latency, where one provider call costs roughl
 orders of magnitude more than the in-process rule planner. `delta` is always
 `llm - rule`; the error rates and the latency carry `lower_is_better`, so the two
 negative deltas above are improvements and the two positive latency deltas are a
-regression. The full per-metric verdicts live in `planner_comparison.json`.
+regression. The full per-metric verdicts live in `planner_comparison.json`. The LLM column above
+is one run, so treat its exact values as one sample. The **LLM planner stability**
+section below repeats the run three times and shows how far each number moves; the
+comparison itself is still rule against the recorded single LLM baseline, and it is not
+re-derived from the best of several runs.
 
 Failures, rule planner. Ten cases, and one known weakness explains all of them.
 
@@ -1080,29 +1086,115 @@ different datasets are refused with both hashes named. The rule side is read fro
 recorded artefact and is never re-run, so a more favourable draw cannot be selected
 after the fact.
 
+### LLM planner stability
+
+The LLM planner is non-deterministic, so one run is a sample rather than a fact. Three
+independent full runs over the same frozen 49 cases, same provider, same model and
+temperature 0, measure how far the numbers move. The provider ran the planner only, no
+tool execution, and nothing about the prompt, the schema or the dataset changed between
+runs.
+
+| Metric | run 01 | run 02 | run 03 | mean | std | min | max |
+| ------ | ------ | ------ | ------ | ---- | --- | --- | --- |
+| `intent_accuracy` | 0.9756 | 0.9756 | 0.9512 | 0.9675 | 0.0115 | 0.9512 | 0.9756 |
+| `tool_selection_exact_match` | 0.8163 | 0.7959 | 0.7959 | 0.8027 | 0.0096 | 0.7959 | 0.8163 |
+| `tool_precision` | 0.9394 | 0.9524 | 0.9524 | 0.9481 | 0.0061 | 0.9394 | 0.9524 |
+| `tool_recall` | 0.9254 | 0.8955 | 0.8955 | 0.9055 | 0.0141 | 0.8955 | 0.9254 |
+| `argument_accuracy` | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 0.0000 | 1.0000 | 1.0000 |
+| `invalid_tool_rate` | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 |
+| `unnecessary_tool_call_rate` | 0.0606 | 0.0476 | 0.0476 | 0.0519 | 0.0061 | 0.0476 | 0.0606 |
+| `task_success_rate` | 0.7959 | 0.7755 | 0.7755 | 0.7823 | 0.0096 | 0.7755 | 0.7959 |
+| `planner_failure_rate` | 0.0000 | 0.0000 | 0.0204 | 0.0068 | 0.0096 | 0.0000 | 0.0204 |
+
+`std` is the population standard deviation over the three runs. `argument_accuracy` and
+`invalid_tool_rate` do not move at all. `intent_accuracy` and `tool_recall` move most,
+and `planner_failure_rate` is zero in two runs and `0.0204` in the third, where one
+case returned output that failed schema validation and was recorded as
+`INVALID_PLANNER_OUTPUT`. That single case is the clearest sign that one run understates
+the failure rate: a suite that reported only run 01 or run 02 would claim a
+`planner_failure_rate` of exactly zero.
+
+Planning latency, reported per run. The three runs are never pooled into one series
+across all cases, because that would blend run-to-run drift into a single distribution.
+
+| Run | mean | median | p95 | min | max |
+| --- | ---- | ------ | --- | --- | --- |
+| run 01 | 1384.73 | 1337.14 | 2223.17 | 739.27 | 2642.07 |
+| run 02 | 1459.68 | 1284.56 | 2639.09 | 672.23 | 3800.60 |
+| run 03 | 1386.89 | 1268.96 | 2288.88 | 476.51 | 3849.73 |
+| mean of run means | 1410.44 | | | 476.51 | 3849.73 |
+
+Out-of-domain stability over the 8 out-of-domain cases.
+
+| Run | `tool_call_rate` | silent | offending |
+| --- | ---------------- | ------ | --------- |
+| run 01 | 0.125 | 7 | `ood-006` |
+| run 02 | 0.000 | 8 | none |
+| run 03 | 0.125 | 7 | `ood-008` |
+| mean | 0.0833 | 7.33 | union: `ood-006`, `ood-008` |
+
+The single-run figure published earlier in this section, a `tool_call_rate` of `0.000`
+over 8 cases, does not reproduce. Across three runs the LLM answers one out-of-domain
+case in two of the three runs, and the offending case is not even the same one. So the
+model is still directionally better than the rule planner's `0.375`, while its
+domain-boundary safety is not stable, and a single run would have hidden that.
+
+Token usage, reported by the provider. The endpoint returns a `usage` object, so these
+counts are measured rather than estimated. The prompt is frozen, so prompt tokens are
+identical across runs; only completion tokens move.
+
+| Run | prompt_tokens | completion_tokens | total_tokens |
+| --- | ------------- | ----------------- | ------------ |
+| run 01 | 44,563 | 8,456 | 53,019 |
+| run 02 | 44,563 | 9,637 | 54,200 |
+| run 03 | 44,563 | 9,095 | 53,658 |
+| 3-run total | 133,689 | 27,188 | 160,877 |
+
+Per case, averaged across the three runs: 909.45 prompt tokens, 184.95 completion
+tokens, 1,094.40 total tokens. No cost figure is published. The provider reports tokens
+and not money, and a price table is not part of this run, so any rupee, dollar or yuan
+number would be an estimate wearing a measurement's clothes.
+
 ### End-to-end subset
 
 A fixed 12-case subset (two per category across `device_status`, `alarm_diagnosis`,
 `maintenance_advice`, `rag_only`, `multi_tool` and `ood`) runs the whole pipeline with
 the real LLM planner and with tool execution, to check that planning survives contact
 with execution. It is a separate run mode and is **not** folded into the planner-only
-comparison.
+comparison. The same 12 case identifiers are used every time; the subset was not
+re-selected after the environment change.
 
-| Measure | Value |
-| ------- | ----- |
-| cases | 12 |
-| `planning_latency_ms` mean | 1565.44 |
-| `execution_latency_ms` mean | 1.29 |
-| `rag_latency_ms` | `null` (0 samples) |
-| `total_latency_ms` mean | 1566.77 |
-| evidence items | 10 across 12 cases |
-| cases with an execution error | 8 / 12 |
-| cases with a rendered answer | 12 / 12 |
+The earlier record, from before the local retrieval provider was configured. It is kept
+and not withdrawn.
 
-Every execution error is the same one: `search_maintenance_manual` reports that the
-RAG repo root is required. That is the documented environment limit, not a planner
-defect, and it is why retrieval latency has no samples. The raw per-case record is
+| Measure | Before the environment fix | After the environment fix |
+| ------- | -------------------------- | ------------------------- |
+| `planning_latency_ms` mean | 1565.44 | 1273.34 |
+| `execution_latency_ms` mean | 1.29 | 489.92 |
+| `rag_latency_ms` mean | `null` (0 samples) | 837.93 (7 samples) |
+| `total_latency_ms` mean | 1566.77 | 1763.33 |
+| evidence items | 10 across 12 cases | 26 across 12 cases |
+| cases with an execution error | 8 / 12 | 0 / 12 |
+| `execution_success_rate` | 0.20 (2 / 10 tool-executing cases) | 1.00 (10 / 10) |
+| cases with a rendered answer | 12 / 12 | 12 / 12 |
+
+Every error in the earlier column was the same one: `search_maintenance_manual`
+reported that the RAG repo root was required. That was a local environment
+configuration gap, not a planner defect, and it also explains why the earlier run had
+no retrieval latency samples at all. The fix was to point the agent's own `.env` at the
+read-only Industrial Knowledge RAG checkout, using the existing `RAG_REPO_ROOT`
+setting. No source file, no prompt and no dataset changed. The raw per-case record,
+including the earlier state as a nested `previous_environment_state` block, is
 `llm_e2e_subset.json`.
+
+Retrieval outcome per case is reported as it is, without requiring a hit. Of the 7
+cases that called `search_maintenance_manual`, 4 returned `found=true` (`ma-001`,
+`ma-002`, `ro-001`, `ro-002`, each with 4 fragments) and 3 returned `found=false`
+(`ad-001`, `mt-001`, `mt-002`). A query that retrieves nothing is a legitimate
+outcome, not an error: `found=false` with a `null` error means retrieval ran and the
+corpus held no matching fragment, which is a property of the knowledge base rather
+than a defect. The first retrieval call in a fresh process also pays the index load,
+visible as `ad-001` at about 4.8 s against the steady state of about 0.18 s.
 
 ### Reports
 
@@ -1111,14 +1203,17 @@ Reports are written to `evaluation/reports/`. A planner-only run writes
 sit side by side as `rule_baseline.json` / `rule_failures.json` and
 `llm_baseline.json` / `llm_failures.json`. An end-to-end run writes
 `rule_e2e_baseline.json` and `rule_e2e_failures.json`. The comparison writes
-`planner_comparison.json`, or `planner_comparison_status.json` when it refuses. A unit
-of the smoke and end-to-end subset checks write `llm_smoke.json` and
-`llm_e2e_subset.json`; both are marked as their own run modes and are never folded
-into the planner-only comparison. A gate report named `<planner>_evaluation_status.json`
-is written only when a run refuses because the provider is missing. Every baseline
-records the dataset path and SHA-256, the planner mode, the run mode, the git commit,
-the registry contents and the application version, so a number can always be traced
-back to the input that produced it.
+`planner_comparison.json`, or `planner_comparison_status.json` when it refuses. The
+smoke and end-to-end subset checks write `llm_smoke.json` and `llm_e2e_subset.json`;
+both are marked as their own run modes and are never folded into the planner-only
+comparison. The stability study writes `llm_repeat_run_01.json` through
+`llm_repeat_run_03.json`, one per independent run, each carrying a `token_usage` block
+plus its own `llm_repeat_run_0N_failures.json`, and aggregates them into
+`llm_stability.json`. A gate report named `<planner>_evaluation_status.json` is written
+only when a run refuses because the provider is missing. Every baseline records the
+dataset path and SHA-256, the planner mode, the run mode, the git commit, the registry
+contents and the application version, so a number can always be traced back to the
+input that produced it.
 
 ### Known limits
 
@@ -1130,22 +1225,24 @@ back to the input that produced it.
    that the synthesis step writes.
 3. **Eight out-of-domain cases can show a weakness, not bound its rate.** A larger
    adversarial set is the only way to turn `0.375` into a defensible estimate.
-4. **The LLM column is one run of one model.** It is a real external provider
-   (`openai_compatible`, model `deepseek-flash`), recorded in `llm_baseline.json`, but a
-   single run carries provider-side variance that one baseline cannot express.
-   Temperature is fixed at 0, which reduces that variance without removing it.
-5. **One dataset and one run per planner.** A comparison over 49 hand-authored cases
-   bounds neither planner on other queries, and a single LLM run carries provider-side
-   variance that one baseline cannot express. A repeated run would be needed before
-   any latency claim about a provider.
+4. **Three runs bound variance only weakly.** The stability study repeats the run three
+   times, and the spread is real: `tool_recall` and `intent_accuracy` move by up to 0.03
+   between runs, `planner_failure_rate` is zero in two runs and non-zero in the third,
+   and a different out-of-domain case is violated in each run that violates one. Three
+   samples are not a confidence interval, and temperature 0 reduces the variance without
+   removing it.
+5. **One dataset and one model.** The comparison covers 49 hand-authored cases with a
+   single provider and model. It bounds neither planner on other queries, and the token
+   and latency figures describe this endpoint rather than the provider in general.
 
 ## Roadmap
 
 1. Add device read endpoints backed by the `Device` model.
 2. Add an Alembic migration for schema versioning.
-3. Repeat the LLM benchmark across several runs to turn the single recorded baseline
-   into a distribution, then report provider-side latency variance instead of one
-   sample. The recorded baseline is a single run.
+3. Build a holdout evaluation set before optimising the planner. Every failure recorded
+   here is on the frozen 49-case set, which is now visible to anyone who reads this file,
+   so tuning against it would overfit. Planner changes belong in a separate version that
+   is scored on a set this repository has never run.
 4. Reduce manual retrieval latency. Measured against the four-document Rockwell
    corpus (4219 chunks), a manual query costs about 4.9 s in steady state, and the
    first query in a fresh process costs about 7.3 s while the module import and

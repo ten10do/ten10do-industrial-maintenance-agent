@@ -9,8 +9,8 @@
     "model": "deepseek-flash"
   },
   "model": "deepseek-flash",
-  "rag_provider_id": null,
-  "note": "E2E subset. Not part of planner-only comparison.",
+  "rag_provider_id": "local",
+  "note": "E2E subset after the local RAG environment fix. Not part of planner-only comparison.",
   "cases": [
     {
       "case_id": "ds-001",
@@ -20,13 +20,14 @@
       "tools": [
         "get_device_status"
       ],
-      "planning_latency_ms": 1784.093,
-      "execution_latency_ms": 9.728,
+      "planning_latency_ms": 1769.681,
+      "execution_latency_ms": 6.397,
       "rag_latency_ms": null,
-      "total_latency_ms": 1793.885,
+      "total_latency_ms": 1776.123,
       "evidence_count": 1,
       "execution_error": false,
       "execution_errors": [],
+      "manual_search": null,
       "answer_present": true
     },
     {
@@ -35,18 +36,16 @@
       "query": "灌装线PLC 运行温度是多少",
       "intent": "device_status",
       "tools": [
-        "get_device_status",
-        "search_maintenance_manual"
+        "get_device_status"
       ],
-      "planning_latency_ms": 2473.779,
-      "execution_latency_ms": 0.625,
+      "planning_latency_ms": 1359.831,
+      "execution_latency_ms": 0.617,
       "rag_latency_ms": null,
-      "total_latency_ms": 2474.443,
+      "total_latency_ms": 1360.491,
       "evidence_count": 1,
-      "execution_error": true,
-      "execution_errors": [
-        "search_maintenance_manual: RAG repo root is required for the local provider."
-      ],
+      "execution_error": false,
+      "execution_errors": [],
+      "manual_search": null,
       "answer_present": true
     },
     {
@@ -56,18 +55,21 @@
       "intent": "alarm_diagnosis",
       "tools": [
         "query_alarm_code",
-        "get_device_status",
-        "search_maintenance_manual"
+        "search_maintenance_manual",
+        "get_device_status"
       ],
-      "planning_latency_ms": 1457.557,
-      "execution_latency_ms": 1.27,
-      "rag_latency_ms": null,
-      "total_latency_ms": 1458.875,
+      "planning_latency_ms": 1452.457,
+      "execution_latency_ms": 4802.181,
+      "rag_latency_ms": 4800.234,
+      "total_latency_ms": 6254.731,
       "evidence_count": 2,
-      "execution_error": true,
-      "execution_errors": [
-        "search_maintenance_manual: RAG repo root is required for the local provider."
-      ],
+      "execution_error": false,
+      "execution_errors": [],
+      "manual_search": {
+        "found": false,
+        "error": null,
+        "hits": 0
+      },
       "answer_present": true
     },
     {
@@ -78,13 +80,14 @@
       "tools": [
         "query_alarm_code"
       ],
-      "planning_latency_ms": 1260.571,
-      "execution_latency_ms": 0.555,
+      "planning_latency_ms": 776.716,
+      "execution_latency_ms": 0.513,
       "rag_latency_ms": null,
-      "total_latency_ms": 1261.167,
+      "total_latency_ms": 777.27,
       "evidence_count": 1,
       "execution_error": false,
       "execution_errors": [],
+      "manual_search": null,
       "answer_present": true
     },
     {
@@ -96,15 +99,18 @@
         "get_device_status",
         "search_maintenance_manual"
       ],
-      "planning_latency_ms": 1319.431,
-      "execution_latency_ms": 0.692,
-      "rag_latency_ms": null,
-      "total_latency_ms": 1320.169,
-      "evidence_count": 1,
-      "execution_error": true,
-      "execution_errors": [
-        "search_maintenance_manual: RAG repo root is required for the local provider."
-      ],
+      "planning_latency_ms": 1795.826,
+      "execution_latency_ms": 195.838,
+      "rag_latency_ms": 195.035,
+      "total_latency_ms": 1991.797,
+      "evidence_count": 5,
+      "execution_error": false,
+      "execution_errors": [],
+      "manual_search": {
+        "found": true,
+        "error": null,
+        "hits": 4
+      },
       "answer_present": true
     },
     {
@@ -115,15 +121,18 @@
       "tools": [
         "search_maintenance_manual"
       ],
-      "planning_latency_ms": 1535.167,
-      "execution_latency_ms": 0.035,
-      "rag_latency_ms": null,
-      "total_latency_ms": 1535.222,
-      "evidence_count": 0,
-      "execution_error": true,
-      "execution_errors": [
-        "search_maintenance_manual: RAG repo root is required for the local provider."
-      ],
+      "planning_latency_ms": 1057.503,
+      "execution_latency_ms": 175.295,
+      "rag_latency_ms": 175.198,
+      "total_latency_ms": 1232.913,
+      "evidence_count": 4,
+      "execution_error": false,
+      "execution_errors": [],
+      "manual_search": {
+        "found": true,
+        "error": null,
+        "hits": 4
+      },
       "answer_present": true
     },
     {
@@ -134,15 +143,18 @@
       "tools": [
         "search_maintenance_manual"
       ],
-      "planning_latency_ms": 1114.351,
-      "execution_latency_ms": 0.034,
-      "rag_latency_ms": null,
-      "total_latency_ms": 1114.404,
-      "evidence_count": 0,
-      "execution_error": true,
-      "execution_errors": [
-        "search_maintenance_manual: RAG repo root is required for the local provider."
-      ],
+      "planning_latency_ms": 1138.87,
+      "execution_latency_ms": 167.88,
+      "rag_latency_ms": 167.796,
+      "total_latency_ms": 1306.852,
+      "evidence_count": 4,
+      "execution_error": false,
+      "execution_errors": [],
+      "manual_search": {
+        "found": true,
+        "error": null,
+        "hits": 4
+      },
       "answer_present": true
     },
     {
@@ -153,15 +165,18 @@
       "tools": [
         "search_maintenance_manual"
       ],
-      "planning_latency_ms": 1029.557,
-      "execution_latency_ms": 0.046,
-      "rag_latency_ms": null,
-      "total_latency_ms": 1029.632,
-      "evidence_count": 0,
-      "execution_error": true,
-      "execution_errors": [
-        "search_maintenance_manual: RAG repo root is required for the local provider."
-      ],
+      "planning_latency_ms": 1166.869,
+      "execution_latency_ms": 176.52,
+      "rag_latency_ms": 176.431,
+      "total_latency_ms": 1343.487,
+      "evidence_count": 4,
+      "execution_error": false,
+      "execution_errors": [],
+      "manual_search": {
+        "found": true,
+        "error": null,
+        "hits": 4
+      },
       "answer_present": true
     },
     {
@@ -174,15 +189,18 @@
         "query_alarm_code",
         "search_maintenance_manual"
       ],
-      "planning_latency_ms": 1692.74,
-      "execution_latency_ms": 1.553,
-      "rag_latency_ms": null,
-      "total_latency_ms": 1694.363,
+      "planning_latency_ms": 1519.003,
+      "execution_latency_ms": 186.778,
+      "rag_latency_ms": 185.083,
+      "total_latency_ms": 1705.873,
       "evidence_count": 2,
-      "execution_error": true,
-      "execution_errors": [
-        "search_maintenance_manual: RAG repo root is required for the local provider."
-      ],
+      "execution_error": false,
+      "execution_errors": [],
+      "manual_search": {
+        "found": false,
+        "error": null,
+        "hits": 0
+      },
       "answer_present": true
     },
     {
@@ -195,15 +213,18 @@
         "get_device_status",
         "search_maintenance_manual"
       ],
-      "planning_latency_ms": 2921.502,
-      "execution_latency_ms": 0.956,
-      "rag_latency_ms": null,
-      "total_latency_ms": 2922.505,
+      "planning_latency_ms": 1598.805,
+      "execution_latency_ms": 166.968,
+      "rag_latency_ms": 165.747,
+      "total_latency_ms": 1765.854,
       "evidence_count": 2,
-      "execution_error": true,
-      "execution_errors": [
-        "search_maintenance_manual: RAG repo root is required for the local provider."
-      ],
+      "execution_error": false,
+      "execution_errors": [],
+      "manual_search": {
+        "found": false,
+        "error": null,
+        "hits": 0
+      },
       "answer_present": true
     },
     {
@@ -212,13 +233,14 @@
       "query": "今天北京天气怎么样",
       "intent": "unknown",
       "tools": [],
-      "planning_latency_ms": 951.342,
+      "planning_latency_ms": 812.195,
       "execution_latency_ms": 0.006,
       "rag_latency_ms": null,
-      "total_latency_ms": 951.363,
+      "total_latency_ms": 812.218,
       "evidence_count": 0,
       "execution_error": false,
       "execution_errors": [],
+      "manual_search": null,
       "answer_present": true
     },
     {
@@ -227,14 +249,87 @@
       "query": "帮我写一首关于秋天的诗",
       "intent": "unknown",
       "tools": [],
-      "planning_latency_ms": 1245.2,
-      "execution_latency_ms": 0.002,
+      "planning_latency_ms": 832.27,
+      "execution_latency_ms": 0.003,
       "rag_latency_ms": null,
-      "total_latency_ms": 1245.214,
+      "total_latency_ms": 832.295,
       "evidence_count": 0,
       "execution_error": false,
       "execution_errors": [],
+      "manual_search": null,
       "answer_present": true
     }
-  ]
+  ],
+  "aggregate": {
+    "cases": 12,
+    "planning_latency_ms_mean": 1273.335,
+    "execution_latency_ms_mean": 489.916,
+    "rag_latency_ms_mean": 837.932,
+    "rag_latency_sampled_cases": 7,
+    "total_latency_ms_mean": 1763.325,
+    "evidence_items_total": 26,
+    "cases_with_evidence": 10,
+    "cases_with_execution_error": 0,
+    "cases_executing_at_least_one_tool": 10,
+    "execution_success_rate": 1.0,
+    "answers_rendered": 12
+  },
+  "rag_retrieval": {
+    "rule": "found=true means at least one fragment was retrieved; a query is not required to hit a document.",
+    "cases_calling_search_maintenance_manual": 7,
+    "found_true": 4,
+    "found_false": 3,
+    "per_case": [
+      {
+        "case_id": "ad-001",
+        "found": false,
+        "hits": 0,
+        "error": null
+      },
+      {
+        "case_id": "ma-001",
+        "found": true,
+        "hits": 4,
+        "error": null
+      },
+      {
+        "case_id": "ma-002",
+        "found": true,
+        "hits": 4,
+        "error": null
+      },
+      {
+        "case_id": "ro-001",
+        "found": true,
+        "hits": 4,
+        "error": null
+      },
+      {
+        "case_id": "ro-002",
+        "found": true,
+        "hits": 4,
+        "error": null
+      },
+      {
+        "case_id": "mt-001",
+        "found": false,
+        "hits": 0,
+        "error": null
+      },
+      {
+        "case_id": "mt-002",
+        "found": false,
+        "hits": 0,
+        "error": null
+      }
+    ]
+  },
+  "previous_environment_state": {
+    "recorded_in": "commit 8559d4a, evaluation/reports/llm_e2e_subset.json",
+    "execution_error_cases": "8/12",
+    "cause": "RAG repo root was not configured, so search_maintenance_manual raised \"RAG repo root is required for the local provider.\" This was a local environment configuration gap, not a planner defect.",
+    "evidence_items_total": 10,
+    "rag_latency_sampled_cases": 0,
+    "note": "Kept for the record. The environment was fixed in this change; the earlier numbers are not withdrawn."
+  }
 }

@@ -1,0 +1,414 @@
+{
+  "schema_version": "1.0",
+  "status": "OK",
+  "planner_mode": "llm",
+  "run_mode": "planner_only",
+  "dataset_sha256": "af873b6c28bd44186dd580369b3120f9b8b4c5d6d1c13ec4a55e0f72d220f0b7",
+  "case_count": 49,
+  "failure_count": 10,
+  "failure_type_counts": {
+    "intent_mismatch": 1,
+    "missing_tool": 5,
+    "unexpected_tool_call_on_ood": 1,
+    "unnecessary_tool": 3
+  },
+  "failures": [
+    {
+      "case_id": "ad-004",
+      "query": "F0302 报警的严重等级和可能原因",
+      "category": "alarm_diagnosis",
+      "failure_type": "unnecessary_tool",
+      "failure_types": [
+        "unnecessary_tool"
+      ],
+      "expected": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "query_alarm_code"
+        ],
+        "arguments": {
+          "query_alarm_code": {
+            "alarm_code": "F0302"
+          }
+        }
+      },
+      "actual": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "query_alarm_code",
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "query_alarm_code": {
+            "alarm_code": "F0302"
+          },
+          "search_maintenance_manual": {
+            "query": "F0302 报警 可能原因 严重等级"
+          }
+        },
+        "planner_used": "llm",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Asks for fields the alarm catalog itself returns. '原因' is a causal word, but the cause list is structured data, so this stays a catalog lookup under P3."
+    },
+    {
+      "case_id": "ad-006",
+      "query": "W0100 保养提醒是什么",
+      "category": "alarm_diagnosis",
+      "failure_type": "unnecessary_tool",
+      "failure_types": [
+        "unnecessary_tool"
+      ],
+      "expected": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "query_alarm_code"
+        ],
+        "arguments": {
+          "query_alarm_code": {
+            "alarm_code": "W0100"
+          }
+        }
+      },
+      "actual": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "query_alarm_code",
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "query_alarm_code": {
+            "alarm_code": "W0100"
+          },
+          "search_maintenance_manual": {
+            "query": "W0100 保养提醒 含义与处理"
+          }
+        },
+        "planner_used": "llm",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Lookup of an informational code. The word 保养 appears but the request is a definition, not a procedure."
+    },
+    {
+      "case_id": "ma-002",
+      "query": "包装线PLC 的保养周期是多久",
+      "category": "maintenance_advice",
+      "failure_type": "missing_tool",
+      "failure_types": [
+        "missing_tool"
+      ],
+      "expected": {
+        "intent": "maintenance_advice",
+        "tools": [
+          "get_device_status",
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "get_device_status": {
+            "device_id": "PLC-001"
+          }
+        }
+      },
+      "actual": {
+        "intent": "maintenance_advice",
+        "tools": [
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "search_maintenance_manual": {
+            "query": "包装线PLC 保养周期 维护周期"
+          }
+        },
+        "planner_used": "llm",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Procedural knowledge plus the device's last maintenance date."
+    },
+    {
+      "case_id": "ma-003",
+      "query": "如何对焊接机器人进行日常维护",
+      "category": "maintenance_advice",
+      "failure_type": "missing_tool",
+      "failure_types": [
+        "missing_tool"
+      ],
+      "expected": {
+        "intent": "maintenance_advice",
+        "tools": [
+          "get_device_status",
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "get_device_status": {
+            "device_id": "Robot-001"
+          }
+        }
+      },
+      "actual": {
+        "intent": "maintenance_advice",
+        "tools": [
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "search_maintenance_manual": {
+            "query": "焊接机器人 Robot-001 日常维护 保养项目 步骤"
+          }
+        },
+        "planner_used": "llm",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Alias target plus a maintenance procedure request."
+    },
+    {
+      "case_id": "ma-005",
+      "query": "Robot-002 需要多久保养一次",
+      "category": "maintenance_advice",
+      "failure_type": "missing_tool",
+      "failure_types": [
+        "missing_tool"
+      ],
+      "expected": {
+        "intent": "maintenance_advice",
+        "tools": [
+          "get_device_status",
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "get_device_status": {
+            "device_id": "Robot-002"
+          }
+        }
+      },
+      "actual": {
+        "intent": "maintenance_advice",
+        "tools": [
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "search_maintenance_manual": {
+            "query": "Robot-002 码垛机器人 保养周期 maintenance interval"
+          }
+        },
+        "planner_used": "llm",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Interval question, answerable only from documentation."
+    },
+    {
+      "case_id": "ma-006",
+      "query": "码垛机器人抓取不准，维修步骤是什么",
+      "category": "maintenance_advice",
+      "failure_type": "missing_tool",
+      "failure_types": [
+        "missing_tool"
+      ],
+      "expected": {
+        "intent": "maintenance_advice",
+        "tools": [
+          "get_device_status",
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "get_device_status": {
+            "device_id": "Robot-002"
+          }
+        }
+      },
+      "actual": {
+        "intent": "maintenance_advice",
+        "tools": [
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "search_maintenance_manual": {
+            "query": "码垛机器人抓取不准 维修步骤",
+            "top_k": 5
+          }
+        },
+        "planner_used": "llm",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Step-by-step repair request."
+    },
+    {
+      "case_id": "mt-005",
+      "query": "Robot-002 运行正常吗，保养周期是多久",
+      "category": "multi_tool",
+      "failure_type": "intent_mismatch",
+      "failure_types": [
+        "intent_mismatch"
+      ],
+      "expected": {
+        "intent": "maintenance_advice",
+        "tools": [
+          "get_device_status",
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "get_device_status": {
+            "device_id": "Robot-002"
+          }
+        }
+      },
+      "actual": {
+        "intent": "device_status",
+        "tools": [
+          "get_device_status",
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "get_device_status": {
+            "device_id": "Robot-002"
+          },
+          "search_maintenance_manual": {
+            "query": "码垛机器人 Robot-002 保养周期 maintenance interval palletizing robot"
+          }
+        },
+        "planner_used": "llm",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Two-part request with no alarm code."
+    },
+    {
+      "case_id": "mt-007",
+      "query": "灌装线PLC 报警 F0112 的严重等级是多少",
+      "category": "multi_tool",
+      "failure_type": "unnecessary_tool",
+      "failure_types": [
+        "unnecessary_tool"
+      ],
+      "expected": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "get_device_status",
+          "query_alarm_code"
+        ],
+        "arguments": {
+          "get_device_status": {
+            "device_id": "PLC-002"
+          },
+          "query_alarm_code": {
+            "alarm_code": "F0112"
+          }
+        }
+      },
+      "actual": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "query_alarm_code",
+          "get_device_status",
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "query_alarm_code": {
+            "alarm_code": "F0112"
+          },
+          "get_device_status": {
+            "device_id": "PLC-002"
+          },
+          "search_maintenance_manual": {
+            "query": "F0112 报警 灌装线PLC 严重等级 处理",
+            "top_k": 5
+          }
+        },
+        "planner_used": "llm",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Device plus code, but the only question asked is the severity, which the catalog carries. No manual search under P3."
+    },
+    {
+      "case_id": "am-002",
+      "query": "PLC-999 报警了，怎么处理",
+      "category": "ambiguous",
+      "failure_type": "missing_tool",
+      "failure_types": [
+        "missing_tool"
+      ],
+      "expected": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "get_device_status",
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "get_device_status": {
+            "device_id": "PLC-999"
+          }
+        }
+      },
+      "actual": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "get_device_status"
+        ],
+        "arguments": {
+          "get_device_status": {
+            "device_id": "PLC-999"
+          }
+        },
+        "planner_used": "llm",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Pattern-valid but unknown device. The tool must be called so the miss is reported rather than assumed, and no alarm code is present so the alarm tool has no valid argument."
+    },
+    {
+      "case_id": "ood-006",
+      "query": "我的汽车发动机报警灯亮了怎么办",
+      "category": "ood",
+      "failure_type": "unexpected_tool_call_on_ood",
+      "failure_types": [
+        "unexpected_tool_call_on_ood"
+      ],
+      "expected": {
+        "intent": null,
+        "tools": [],
+        "arguments": {}
+      },
+      "actual": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "search_maintenance_manual": {
+            "query": "汽车发动机报警灯亮 处理与排查",
+            "top_k": null
+          }
+        },
+        "planner_used": "llm",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Keyword bait: contains 报警 and 怎么办. A car engine is outside the covered equipment, so any tool call is unnecessary."
+    }
+  ]
+}
