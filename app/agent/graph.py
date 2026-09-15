@@ -127,6 +127,23 @@ _TOOL_ARGUMENTS: dict[str, ArgumentBuilder] = {
 }
 
 
+def build_tool_arguments(name: str, state: MaintenanceState) -> dict[str, Any] | None:
+    """Return the arguments the executor derives for ``name`` from ``state``.
+
+    A read-only accessor over the frozen adapter table above. It exists so the
+    evaluation harness can score argument accuracy for the rule planner, which
+    keeps its arguments out of the plan and derives them here at execution time.
+    Exposing the mapping is what prevents a second, drifting copy in the harness.
+
+    It selects nothing and changes no behaviour. Returns ``None`` for a tool with
+    no adapter.
+    """
+    builder = _TOOL_ARGUMENTS.get(name)
+    if builder is None:
+        return None
+    return builder(state)
+
+
 def _as_payload(value: Any) -> Any:
     """Convert a tool return value into a JSON-serializable payload."""
     if isinstance(value, BaseModel):

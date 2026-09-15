@@ -1,0 +1,390 @@
+{
+  "schema_version": "1.0",
+  "status": "OK",
+  "planner_mode": "rule",
+  "run_mode": "planner_only",
+  "dataset_sha256": "af873b6c28bd44186dd580369b3120f9b8b4c5d6d1c13ec4a55e0f72d220f0b7",
+  "case_count": 49,
+  "failure_count": 10,
+  "failure_type_counts": {
+    "intent_mismatch": 1,
+    "missing_tool": 1,
+    "unexpected_tool_call_on_ood": 3,
+    "unnecessary_tool": 6
+  },
+  "failures": [
+    {
+      "case_id": "ad-002",
+      "query": "F0112 是什么意思",
+      "category": "alarm_diagnosis",
+      "failure_type": "unnecessary_tool",
+      "failure_types": [
+        "unnecessary_tool"
+      ],
+      "expected": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "query_alarm_code"
+        ],
+        "arguments": {
+          "query_alarm_code": {
+            "alarm_code": "F0112"
+          }
+        }
+      },
+      "actual": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "query_alarm_code",
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "query_alarm_code": {
+            "alarm_code": "F0112"
+          },
+          "search_maintenance_manual": {
+            "query": "F0112 是什么意思"
+          }
+        },
+        "planner_used": "rule",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Bare code lookup. Per P3 the catalog already carries name, severity, category, causes and actions, so no manual search is required."
+    },
+    {
+      "case_id": "ad-004",
+      "query": "F0302 报警的严重等级和可能原因",
+      "category": "alarm_diagnosis",
+      "failure_type": "unnecessary_tool",
+      "failure_types": [
+        "unnecessary_tool"
+      ],
+      "expected": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "query_alarm_code"
+        ],
+        "arguments": {
+          "query_alarm_code": {
+            "alarm_code": "F0302"
+          }
+        }
+      },
+      "actual": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "query_alarm_code",
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "query_alarm_code": {
+            "alarm_code": "F0302"
+          },
+          "search_maintenance_manual": {
+            "query": "F0302 报警的严重等级和可能原因"
+          }
+        },
+        "planner_used": "rule",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Asks for fields the alarm catalog itself returns. '原因' is a causal word, but the cause list is structured data, so this stays a catalog lookup under P3."
+    },
+    {
+      "case_id": "ad-006",
+      "query": "W0100 保养提醒是什么",
+      "category": "alarm_diagnosis",
+      "failure_type": "unnecessary_tool",
+      "failure_types": [
+        "unnecessary_tool"
+      ],
+      "expected": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "query_alarm_code"
+        ],
+        "arguments": {
+          "query_alarm_code": {
+            "alarm_code": "W0100"
+          }
+        }
+      },
+      "actual": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "query_alarm_code",
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "query_alarm_code": {
+            "alarm_code": "W0100"
+          },
+          "search_maintenance_manual": {
+            "query": "W0100 保养提醒是什么"
+          }
+        },
+        "planner_used": "rule",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Lookup of an informational code. The word 保养 appears but the request is a definition, not a procedure."
+    },
+    {
+      "case_id": "ad-008",
+      "query": "灌装线PLC 报 F0112 了",
+      "category": "alarm_diagnosis",
+      "failure_type": "unnecessary_tool",
+      "failure_types": [
+        "unnecessary_tool"
+      ],
+      "expected": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "get_device_status",
+          "query_alarm_code"
+        ],
+        "arguments": {
+          "get_device_status": {
+            "device_id": "PLC-002"
+          },
+          "query_alarm_code": {
+            "alarm_code": "F0112"
+          }
+        }
+      },
+      "actual": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "get_device_status",
+          "query_alarm_code",
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "get_device_status": {
+            "device_id": "PLC-002"
+          },
+          "query_alarm_code": {
+            "alarm_code": "F0112"
+          },
+          "search_maintenance_manual": {
+            "query": "灌装线PLC 报 F0112 了"
+          }
+        },
+        "planner_used": "rule",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Notification with no request for advice, so the manual is not warranted under P3."
+    },
+    {
+      "case_id": "ro-003",
+      "query": "工业现场变频器日常巡检要注意什么",
+      "category": "rag_only",
+      "failure_type": "missing_tool",
+      "failure_types": [
+        "intent_mismatch",
+        "missing_tool"
+      ],
+      "expected": {
+        "intent": "maintenance_advice",
+        "tools": [
+          "search_maintenance_manual"
+        ],
+        "arguments": {}
+      },
+      "actual": {
+        "intent": "unknown",
+        "tools": [],
+        "arguments": {},
+        "planner_used": "rule",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Inspection guidance. Deliberately phrased without the maintenance keywords the rule parser looks for, to measure keyword coverage rather than to flatter it."
+    },
+    {
+      "case_id": "mt-007",
+      "query": "灌装线PLC 报警 F0112 的严重等级是多少",
+      "category": "multi_tool",
+      "failure_type": "unnecessary_tool",
+      "failure_types": [
+        "unnecessary_tool"
+      ],
+      "expected": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "get_device_status",
+          "query_alarm_code"
+        ],
+        "arguments": {
+          "get_device_status": {
+            "device_id": "PLC-002"
+          },
+          "query_alarm_code": {
+            "alarm_code": "F0112"
+          }
+        }
+      },
+      "actual": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "get_device_status",
+          "query_alarm_code",
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "get_device_status": {
+            "device_id": "PLC-002"
+          },
+          "query_alarm_code": {
+            "alarm_code": "F0112"
+          },
+          "search_maintenance_manual": {
+            "query": "灌装线PLC 报警 F0112 的严重等级是多少"
+          }
+        },
+        "planner_used": "rule",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Device plus code, but the only question asked is the severity, which the catalog carries. No manual search under P3."
+    },
+    {
+      "case_id": "am-004",
+      "query": "这个报警什么意思",
+      "category": "ambiguous",
+      "failure_type": "unnecessary_tool",
+      "failure_types": [
+        "unnecessary_tool"
+      ],
+      "expected": {
+        "intent": "alarm_diagnosis",
+        "tools": [],
+        "arguments": {}
+      },
+      "actual": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "search_maintenance_manual": {
+            "query": "这个报警什么意思"
+          }
+        },
+        "planner_used": "rule",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Refers to an alarm that is not supplied. No tool has a valid argument, so the correct plan is empty."
+    },
+    {
+      "case_id": "ood-006",
+      "query": "我的汽车发动机报警灯亮了怎么办",
+      "category": "ood",
+      "failure_type": "unexpected_tool_call_on_ood",
+      "failure_types": [
+        "unexpected_tool_call_on_ood"
+      ],
+      "expected": {
+        "intent": null,
+        "tools": [],
+        "arguments": {}
+      },
+      "actual": {
+        "intent": "alarm_diagnosis",
+        "tools": [
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "search_maintenance_manual": {
+            "query": "我的汽车发动机报警灯亮了怎么办"
+          }
+        },
+        "planner_used": "rule",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Keyword bait: contains 报警 and 怎么办. A car engine is outside the covered equipment, so any tool call is unnecessary."
+    },
+    {
+      "case_id": "ood-007",
+      "query": "手机电池过热怎么办",
+      "category": "ood",
+      "failure_type": "unexpected_tool_call_on_ood",
+      "failure_types": [
+        "unexpected_tool_call_on_ood"
+      ],
+      "expected": {
+        "intent": null,
+        "tools": [],
+        "arguments": {}
+      },
+      "actual": {
+        "intent": "maintenance_advice",
+        "tools": [
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "search_maintenance_manual": {
+            "query": "手机电池过热怎么办"
+          }
+        },
+        "planner_used": "rule",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Keyword bait: contains 过热 and 怎么办. Consumer electronics, not industrial equipment."
+    },
+    {
+      "case_id": "ood-008",
+      "query": "家里的空调不制冷了怎么处理",
+      "category": "ood",
+      "failure_type": "unexpected_tool_call_on_ood",
+      "failure_types": [
+        "unexpected_tool_call_on_ood"
+      ],
+      "expected": {
+        "intent": null,
+        "tools": [],
+        "arguments": {}
+      },
+      "actual": {
+        "intent": "maintenance_advice",
+        "tools": [
+          "search_maintenance_manual"
+        ],
+        "arguments": {
+          "search_maintenance_manual": {
+            "query": "家里的空调不制冷了怎么处理"
+          }
+        },
+        "planner_used": "rule",
+        "planner_fallback": false,
+        "planner_fallback_reason": null,
+        "planning_error": null,
+        "execution_errors": []
+      },
+      "notes": "Keyword bait: contains 怎么处理. A domestic appliance, outside the knowledge base."
+    }
+  ]
+}

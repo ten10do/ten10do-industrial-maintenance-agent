@@ -18,6 +18,14 @@ what the tools actually returned. The default configuration,
 `PLANNER_MODE=rule`, leaves V0.4 behaviour untouched: with no provider configured
 the pipeline is still entirely LLM-free.
 
+V0.6 adds an agent evaluation framework. It is separate from `tests/` on purpose:
+a software test asserts that the code does what the specification says, and it
+cannot tell you how often the plan is the right plan. The framework measures agent
+capability against a hand-authored answer key, so the rule planner's intent
+accuracy, tool selection and argument handling are quantified instead of assumed.
+The baseline is produced by running the real planner over the real dataset. No stub
+is scored, and no number is reported that was not measured.
+
 ## Stack
 
 | Concern       | Choice                                        |
@@ -30,6 +38,7 @@ the pipeline is still entirely LLM-free.
 | RAG client    | `httpx` (HTTP provider) or in-process import (local provider) |
 | LLM client    | `httpx`, optional and configured off by default |
 | Testing       | pytest + httpx TestClient                     |
+| Agent eval    | `evaluation/`: hand-authored dataset + metric harness |
 
 ## Project layout
 
@@ -89,7 +98,7 @@ industrial-maintenance-agent/
 │   │   ├── alarm_tool.py    # query_alarm_code (data/alarms.json backed)
 │   │   └── maintenance_manual_tool.py  # search_maintenance_manual (RAG backed)
 │   └── evaluation/
-│       └── metrics.py       # Offline scoring helpers
+│       └── metrics.py       # V0.2 placeholder scoring (superseded, see Agent evaluation)
 ├── tests/
 │   ├── test_health.py           # Smoke tests
 │   ├── test_database.py         # Device model + init_db tests
@@ -104,7 +113,15 @@ industrial-maintenance-agent/
 │   ├── fake_llm.py              # LLM provider double, no network
 │   ├── test_llm_provider.py     # Provider envelope, errors, credential safety
 │   ├── test_llm_planner.py      # Prompt, plan validation, error taxonomy
-│   └── test_planner_modes.py    # rule / llm / auto, executor, API surface
+│   ├── test_planner_modes.py    # rule / llm / auto, executor, API surface
+│   └── test_evaluation.py       # Dataset, metrics, OOD safety, CLI, LLM gate
+├── evaluation/                  # Agent evaluation framework (V0.6)
+│   ├── dataset.json             # 49 hand-authored cases + ground-truth policy
+│   ├── dataset.py               # Dataset models and answer-key validation
+│   ├── metrics.py               # Metric primitives; a zero denominator is null
+│   ├── evaluator.py             # Per-case scoring and aggregation
+│   ├── runner.py                # CLI: planner-only / end-to-end, LLM gate
+│   └── reports/                 # Generated baselines and failure records
 ├── data/
 │   ├── devices.json         # Device seed data
 │   ├── alarms.json          # Alarm code catalog
@@ -739,9 +756,9 @@ latency figure. It never prints the prompt, the raw completion or the key.
 
 ```bash
 pytest
-ruff check app tests
-ruff format --check app tests
-mypy app tests
+ruff check app tests evaluation scripts
+ruff format --check app tests evaluation scripts
+mypy app tests evaluation
 ```
 
 The RAG provider tests exercise both providers against contract-faithful
@@ -762,6 +779,13 @@ And `app/services/__init__.py` exports the agent-dependent service lazily, becau
 the agent layer imports `app.services.device_catalog`; an eager import there would
 make the import order decide whether a module loads.
 
+`tests/test_evaluation.py` is where the framework is tested. Most of it drives the
+metric primitives and the per-case evaluator with synthetic observations, so it
+needs neither a database nor a network. One module-scoped fixture runs the real
+rule planner over the real dataset once, and the checks then read that single
+report. That fixture is deliberate: the honest failures of the frozen baseline are
+pinned by case id, so a change that makes them pass fails the suite.
+
 ### Manual check
 
 ```bash
@@ -771,17 +795,193 @@ curl -s -X POST http://127.0.0.1:8123/agent/invoke \
   -H "Content-Type: application/json" -d '{"query": "PLC-001 现在什么状态"}'
 ```
 
+## Agent evaluation (V0.6)
+
+A software test and an agent evaluation answer different questions, and this
+project keeps them apart. `pytest` can assert that the rule planner returns
+`["get_device_status"]` for a query. It cannot tell you how often that is the right
+answer, how often the planner reaches for a tool nobody asked for, or whether it
+invents a tool name. The framework in `evaluation/` measures those.
+
+```bash
+# Planner only: fast, touches no tool, roughly 0.2 ms per case.
+python -m evaluation.runner --planner rule
+
+# End to end: adds execution, evidence and synthesis, and records their latency.
+python -m evaluation.runner --planner rule --execute-tools --tag rule_e2e
+
+# LLM planner, when a provider is configured.
+python -m evaluation.runner --planner llm
+python -m evaluation.runner --planner auto
+```
+
+Two run modes exist because they answer different questions. A planner-only run
+scores the plan and never executes a tool, so the roughly five-second manual
+retrieval never runs and the whole dataset costs a fraction of a second. This is
+the mode to use when comparing planners. An end-to-end run continues into the
+executor, the evidence step and the synthesis step, and additionally records
+execution and retrieval latency.
+
+### Dataset
+
+`evaluation/dataset.json` holds 49 hand-authored cases. The answer key was fixed in
+advance: the `ground_truth_policy` block states the seven rules (`P1` to `P7`) that
+decide what each query should require, and the cases were written against those
+rules. No case was tuned to make the rule planner look better or worse.
+
+| Category             | Cases | What it covers |
+| -------------------- | ----- | -------------- |
+| `device_status`      | 8     | Device condition questions, grounded on the device record |
+| `alarm_diagnosis`    | 8     | Alarm codes, from a bare code lookup to a full fault-handling request |
+| `maintenance_advice` | 6     | Device-specific maintenance or handling advice |
+| `rag_only`           | 6     | Knowledge with no structured coverage, answerable only from the manual |
+| `multi_tool`         | 8     | Requests that need more than one tool |
+| `ambiguous`          | 5     | Under-specified or terse requests |
+| `ood`                | 8     | Out-of-domain requests that must not trigger an industrial tool call |
+
+Each case carries `id`, `category`, `query`, `expected_intent`, `expected_tools`
+and, where the arguments are known, `expected_arguments`. An out-of-domain case
+expects no tool and no intent. Loading validates the answer key: ids must be
+unique, an intent must come from the parser vocabulary, `expected_arguments` may
+only name a tool the case expects, and an out-of-domain case must agree with
+itself.
+
+### Metrics
+
+Ten metrics are reported. Their definitions ship inside every report, so a number
+is always read next to what it means.
+
+| Metric | Definition |
+| ------ | ---------- |
+| `intent_accuracy` | Cases whose planned intent matches, over non-out-of-domain cases |
+| `tool_selection_exact_match` | Cases whose tool set matches exactly, over all cases |
+| `tool_precision` | True-positive selections over all selections, pooled (micro) |
+| `tool_recall` | True-positive selections over all expected tools, pooled (micro) |
+| `argument_accuracy` | Declared-argument checks that passed, over all checks |
+| `invalid_tool_rate` | Selected names absent from the registry, over all selections |
+| `unnecessary_tool_call_rate` | Selected tools the case did not expect, over all selections |
+| `task_success_rate` | Plans that are fully correct, over all cases |
+| `planner_failure_rate` | Cases where planning raised, over all cases |
+| `average_planning_latency_ms` | Mean planning wall time, over measured cases |
+
+`execution_error_rate` is an eleventh metric, present only in an end-to-end run.
+
+Three definitional choices are load-bearing, and each one closes a way for a
+benchmark to flatter itself.
+
+1. **Task success is judged on the plan.** A case succeeds when the intent, the
+   tool set and every declared argument are correct, no invalid tool was named and
+   planning did not fail. Execution outcomes are reported through
+   `execution_error_rate` and the failure records. A planner-only run and an
+   end-to-end run of the same planner therefore stay directly comparable.
+2. **A zero denominator is `null`.** A planner that never selects a tool has no
+   precision, and reporting `1.0` for it would be a fabricated success. Every
+   denominator is counted explicitly in the report's `denominators` block, so each
+   ratio can be recomputed from the published numbers.
+3. **Out-of-domain cases are excluded from intent accuracy.** There is no
+   maintenance intent to classify. Their signal is the `ood_safety` block, which
+   reports how many stayed silent and names the ones that did not.
+
+### Rule planner baseline
+
+Measured on 2026-09-15 by running the frozen rule planner over the 49 shipped
+cases, planner-only, dataset SHA-256 `af873b6c…`. These are recorded measurements.
+
+| Metric | Value | Counts |
+| ------ | ----- | ------ |
+| `intent_accuracy` | 0.9756 | 40 / 41 |
+| `tool_selection_exact_match` | 0.7959 | 39 / 49 |
+| `tool_precision` | 0.8800 | 66 / 75 |
+| `tool_recall` | 0.9851 | 66 / 67 |
+| `argument_accuracy` | 1.0000 | 42 / 42 |
+| `invalid_tool_rate` | 0.0000 | 0 / 75 |
+| `unnecessary_tool_call_rate` | 0.1200 | 9 / 75 |
+| `task_success_rate` | 0.7959 | 39 / 49 |
+| `planner_failure_rate` | 0.0000 | 0 / 49 |
+| `average_planning_latency_ms` | 0.22 to 0.29 | 49 samples |
+
+For a fixed dataset and planner the nine behavioural metrics above are
+deterministic. Planning latency is wall time on this machine and moves by a few
+hundredths of a millisecond between runs, so it is quoted as a range.
+
+In an end-to-end run the planning metrics are identical, and
+`execution_error_rate` is 0.6735 (33 / 49). That figure describes the environment
+rather than the planner. No retrieval provider can be built here, so the manual
+search tool reports unavailability, and retrieval latency stays `null` instead of
+being estimated.
+
+Ten cases fail, and one known weakness explains all of them. The rule planner is
+keyword-driven, so it reaches for the manual search whenever a maintenance-sounding
+word appears, even when a structured tool already answers the question.
+
+| Primary failure type | Cases |
+| -------------------- | ----- |
+| `unnecessary_tool` | `ad-002`, `ad-004`, `ad-006`, `ad-008`, `mt-007`, `am-004` |
+| `missing_tool` | `ro-003`, which also carries `intent_mismatch` |
+| `unexpected_tool_call_on_ood` | `ood-006` (car engine), `ood-007` (phone battery), `ood-008` (home air conditioner) |
+
+The three out-of-domain offenders are keyword bait: consumer and automotive
+queries that share vocabulary with industrial maintenance. The other five
+out-of-domain cases are handled correctly, so the agent stays silent on 5 of 8. The
+`alarm_diagnosis` failures share a cause. A bare alarm lookup such as `F0112 是什么
+意思` is fully answerable from the alarm catalog, which already carries the name,
+severity, category, causes and recommended actions, so the policy does not require
+a manual search, and the rule planner issues one anyway.
+
+These cases are pinned by identifier in `tests/test_evaluation.py`. A change that
+makes them pass fails that suite, which is the intended reading: the answer key
+moved.
+
+### LLM Evaluation: NOT RUN
+
+**LLM Evaluation: NOT RUN.** No provider is configured in this environment, so no
+LLM planner has been benchmarked and no LLM number appears anywhere in this
+README.
+
+`--planner llm` and `--planner auto` detect the missing provider and write a gate
+report with `status: "LLM_EVALUATION_NOT_RUN"` and `metrics: null`, then exit 0.
+They do not quietly run the rule planner under an LLM label, and no stub or
+fabricated score is produced. The gate names the three variables a real run needs:
+`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`. Given those, the same command produces
+the same ten metrics for the LLM planner, and the comparison becomes a real one.
+
+Reports are written to `evaluation/reports/`. A planner-only rule run writes
+`rule_baseline.json` and `rule_failures.json`, an end-to-end run writes
+`rule_e2e_baseline.json` and `rule_e2e_failures.json`, and a gated run writes
+`<planner>_evaluation_status.json`. Every report records the dataset path and
+SHA-256, the planner mode, the run mode, the git commit, the registry contents and
+the application version, so a number can always be traced back to the input that
+produced it.
+
+### Known limits
+
+1. **The dataset is a hand-authored reference, not a public benchmark.** 49 cases
+   support the claim that the rule planner is right on 39 of these 49. They do not
+   support a general accuracy figure.
+2. **The plan is scored, and the prose is not.** The framework measures whether the
+   right tools were chosen with the right arguments. It does not score the answer
+   that the synthesis step writes.
+3. **Eight out-of-domain cases can show a weakness, not bound its rate.** A larger
+   adversarial set is the only way to turn `0.375` into a defensible estimate.
+4. **`app/evaluation/metrics.py` is a superseded V0.2 placeholder.** Nothing
+   imports it, and the framework lives in `evaluation/`. Removing it is a follow-up
+   decision, and it is left in place rather than deleted silently.
+
 ## Roadmap
 
 1. Add device read endpoints backed by the `Device` model.
 2. Add an Alembic migration for schema versioning.
-3. Replace the placeholder metrics in `app/evaluation/metrics.py`.
-4. Reduce manual retrieval latency. Measured against the four-document Rockwell
+3. Delete the superseded V0.2 placeholder `app/evaluation/metrics.py`. The real
+   framework now lives in `evaluation/` and nothing imports the placeholder.
+4. Run the LLM evaluation once a provider is configured, and publish the LLM
+   column next to the rule baseline. Until then the gate reports
+   `LLM_EVALUATION_NOT_RUN`.
+5. Reduce manual retrieval latency. Measured against the four-document Rockwell
    corpus (4219 chunks), a manual query costs about 4.9 s in steady state, and the
    first query in a fresh process costs about 7.3 s while the module import and
    index load are paid. The light backend re-reads the index and re-fits its
    TF-IDF model per call. Caching belongs in the integration layer; the reported
    `latency_ms` states the real cost in the meantime.
-5. Add multi-turn planning: carry prior tool results into the planner prompt so a
+6. Add multi-turn planning: carry prior tool results into the planner prompt so a
    follow-up can build on what the previous turn retrieved.
-6. Add authentication to `/agent/invoke` before it is exposed beyond localhost.
+7. Add authentication to `/agent/invoke` before it is exposed beyond localhost.

@@ -1,0 +1,485 @@
+{
+  "schema_version": "1.0",
+  "name": "industrial-maintenance-agent-eval",
+  "description": "Agent capability evaluation set for the Industrial Maintenance Agent. This measures planning behaviour, not software correctness: the pytest suite answers 'does the code do what it says', while this set answers 'does the agent choose the right actions for a maintenance request'. Expectations are hand-authored from the ground-truth policy below and were fixed before any planner was run.",
+  "ground_truth_policy": {
+    "P1_device_status": "get_device_status is required if and only if a device identifier is resolvable from the query, either as a canonical id (PREFIX-123) or as a registered device name alias.",
+    "P2_alarm_lookup": "query_alarm_code is required if and only if the query contains an alarm code that matches LETTER+four digits.",
+    "P3_manual_search": "search_maintenance_manual is required if and only if the query asks for procedural or causal knowledge that the structured tools cannot supply: how to handle, fix, repair, inspect or maintain something, why a symptom occurs, or a topic with no structured coverage in the device or alarm catalog. A question fully answerable from a structured tool's own fields (device metrics; alarm code name, severity, category, possible causes, recommended actions) is not a manual-search case.",
+    "P4_out_of_domain": "A case is out of domain if the query is not about maintaining the industrial equipment covered by the device catalog, the alarm catalog or the maintenance manual. Out-of-domain cases expect no tool call at all.",
+    "P5_intent": "expected_intent uses the parser vocabulary alarm_diagnosis | maintenance_advice | device_status | unknown. It is null only for out-of-domain cases, where the correct behaviour is to decline rather than classify.",
+    "P6_arguments": "expected_arguments is declared only for tools with deterministic arguments (device_id, alarm_code). search_maintenance_manual takes free-form query text, so no argument expectation is declared for it and it is excluded from argument accuracy.",
+    "P7_no_tuning": "No expectation was adjusted to improve a planner's score. Where the frozen rule planner is expected to disagree with this policy, the disagreement is recorded as a baseline failure rather than absorbed into the answer key."
+  },
+  "categories": {
+    "device_status": "Device condition questions that should ground on the device record.",
+    "alarm_diagnosis": "Alarm code questions, ranging from a bare code lookup to a full fault-handling request.",
+    "maintenance_advice": "Device-specific maintenance or handling advice.",
+    "rag_only": "Knowledge questions with no structured coverage, answerable only from the manual.",
+    "multi_tool": "Requests that need more than one tool, including the full device + alarm + manual path.",
+    "ambiguous": "Under-specified or terse requests where the correct scope has to be inferred.",
+    "ood": "Out-of-domain requests that must not trigger an industrial tool call."
+  },
+  "cases": [
+    {
+      "id": "ds-001",
+      "category": "device_status",
+      "query": "PLC-001 现在什么状态",
+      "expected_intent": "device_status",
+      "expected_tools": ["get_device_status"],
+      "expected_arguments": {"get_device_status": {"device_id": "PLC-001"}},
+      "notes": "Canonical id plus an explicit status question."
+    },
+    {
+      "id": "ds-002",
+      "category": "device_status",
+      "query": "灌装线PLC 运行温度是多少",
+      "expected_intent": "device_status",
+      "expected_tools": ["get_device_status"],
+      "expected_arguments": {"get_device_status": {"device_id": "PLC-002"}},
+      "notes": "Device name alias must resolve to the canonical id."
+    },
+    {
+      "id": "ds-003",
+      "category": "device_status",
+      "query": "Robot-002 的转速和压力",
+      "expected_intent": "device_status",
+      "expected_tools": ["get_device_status"],
+      "expected_arguments": {"get_device_status": {"device_id": "Robot-002"}},
+      "notes": "Metric names only, no verb."
+    },
+    {
+      "id": "ds-004",
+      "category": "device_status",
+      "query": "CNC-001 目前是否空闲",
+      "expected_intent": "device_status",
+      "expected_tools": ["get_device_status"],
+      "expected_arguments": {"get_device_status": {"device_id": "CNC-001"}},
+      "notes": "Paraphrase with no status keyword; the named device is what matters."
+    },
+    {
+      "id": "ds-005",
+      "category": "device_status",
+      "query": "焊接机器人状态正常吗",
+      "expected_intent": "device_status",
+      "expected_tools": ["get_device_status"],
+      "expected_arguments": {"get_device_status": {"device_id": "Robot-001"}},
+      "notes": "Alias only, no id pattern."
+    },
+    {
+      "id": "ds-006",
+      "category": "device_status",
+      "query": "帮我查一下 PLC-002 的当前参数",
+      "expected_intent": "device_status",
+      "expected_tools": ["get_device_status"],
+      "expected_arguments": {"get_device_status": {"device_id": "PLC-002"}},
+      "notes": "Polite phrasing with the device not at the start of the sentence."
+    },
+    {
+      "id": "ds-007",
+      "category": "device_status",
+      "query": "Robot-001 temperature and rpm",
+      "expected_intent": "device_status",
+      "expected_tools": ["get_device_status"],
+      "expected_arguments": {"get_device_status": {"device_id": "Robot-001"}},
+      "notes": "English device metrics query."
+    },
+    {
+      "id": "ds-008",
+      "category": "device_status",
+      "query": "数控加工中心现在怎么样",
+      "expected_intent": "device_status",
+      "expected_tools": ["get_device_status"],
+      "expected_arguments": {"get_device_status": {"device_id": "CNC-001"}},
+      "notes": "Vague condition question; the alias makes the target unambiguous."
+    },
+
+    {
+      "id": "ad-001",
+      "category": "alarm_diagnosis",
+      "query": "包装线PLC报警F0045怎么办",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": ["get_device_status", "query_alarm_code", "search_maintenance_manual"],
+      "expected_arguments": {
+        "get_device_status": {"device_id": "PLC-001"},
+        "query_alarm_code": {"alarm_code": "F0045"}
+      },
+      "notes": "Device, code and an explicit how-to-handle request."
+    },
+    {
+      "id": "ad-002",
+      "category": "alarm_diagnosis",
+      "query": "F0112 是什么意思",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": ["query_alarm_code"],
+      "expected_arguments": {"query_alarm_code": {"alarm_code": "F0112"}},
+      "notes": "Bare code lookup. Per P3 the catalog already carries name, severity, category, causes and actions, so no manual search is required."
+    },
+    {
+      "id": "ad-003",
+      "category": "alarm_diagnosis",
+      "query": "报警代码 E0071 怎么处理",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": ["query_alarm_code", "search_maintenance_manual"],
+      "expected_arguments": {"query_alarm_code": {"alarm_code": "E0071"}},
+      "notes": "No device named, so no status call; the handling request makes the manual relevant."
+    },
+    {
+      "id": "ad-004",
+      "category": "alarm_diagnosis",
+      "query": "F0302 报警的严重等级和可能原因",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": ["query_alarm_code"],
+      "expected_arguments": {"query_alarm_code": {"alarm_code": "F0302"}},
+      "notes": "Asks for fields the alarm catalog itself returns. '原因' is a causal word, but the cause list is structured data, so this stays a catalog lookup under P3."
+    },
+    {
+      "id": "ad-005",
+      "category": "alarm_diagnosis",
+      "query": "Robot-001 报 E0071 故障了，原因是什么",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": ["get_device_status", "query_alarm_code", "search_maintenance_manual"],
+      "expected_arguments": {
+        "get_device_status": {"device_id": "Robot-001"},
+        "query_alarm_code": {"alarm_code": "E0071"}
+      },
+      "notes": "Device plus code plus a why-question that asks beyond the catalog text."
+    },
+    {
+      "id": "ad-006",
+      "category": "alarm_diagnosis",
+      "query": "W0100 保养提醒是什么",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": ["query_alarm_code"],
+      "expected_arguments": {"query_alarm_code": {"alarm_code": "W0100"}},
+      "notes": "Lookup of an informational code. The word 保养 appears but the request is a definition, not a procedure."
+    },
+    {
+      "id": "ad-007",
+      "category": "alarm_diagnosis",
+      "query": "PLC-002 报警 F0112，需要停机检修吗",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": ["get_device_status", "query_alarm_code", "search_maintenance_manual"],
+      "expected_arguments": {
+        "get_device_status": {"device_id": "PLC-002"},
+        "query_alarm_code": {"alarm_code": "F0112"}
+      },
+      "notes": "Requires the device condition to judge a shutdown decision."
+    },
+    {
+      "id": "ad-008",
+      "category": "alarm_diagnosis",
+      "query": "灌装线PLC 报 F0112 了",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": ["get_device_status", "query_alarm_code"],
+      "expected_arguments": {
+        "get_device_status": {"device_id": "PLC-002"},
+        "query_alarm_code": {"alarm_code": "F0112"}
+      },
+      "notes": "Notification with no request for advice, so the manual is not warranted under P3."
+    },
+
+    {
+      "id": "ma-001",
+      "category": "maintenance_advice",
+      "query": "PLC-001 温度过高怎么处理",
+      "expected_intent": "maintenance_advice",
+      "expected_tools": ["get_device_status", "search_maintenance_manual"],
+      "expected_arguments": {"get_device_status": {"device_id": "PLC-001"}},
+      "notes": "Symptom plus handling request; the real temperature matters to the advice."
+    },
+    {
+      "id": "ma-002",
+      "category": "maintenance_advice",
+      "query": "包装线PLC 的保养周期是多久",
+      "expected_intent": "maintenance_advice",
+      "expected_tools": ["get_device_status", "search_maintenance_manual"],
+      "expected_arguments": {"get_device_status": {"device_id": "PLC-001"}},
+      "notes": "Procedural knowledge plus the device's last maintenance date."
+    },
+    {
+      "id": "ma-003",
+      "category": "maintenance_advice",
+      "query": "如何对焊接机器人进行日常维护",
+      "expected_intent": "maintenance_advice",
+      "expected_tools": ["get_device_status", "search_maintenance_manual"],
+      "expected_arguments": {"get_device_status": {"device_id": "Robot-001"}},
+      "notes": "Alias target plus a maintenance procedure request."
+    },
+    {
+      "id": "ma-004",
+      "category": "maintenance_advice",
+      "query": "数控加工中心主轴振动偏大，怎么排查",
+      "expected_intent": "maintenance_advice",
+      "expected_tools": ["get_device_status", "search_maintenance_manual"],
+      "expected_arguments": {"get_device_status": {"device_id": "CNC-001"}},
+      "notes": "Symptom description with a troubleshooting request."
+    },
+    {
+      "id": "ma-005",
+      "category": "maintenance_advice",
+      "query": "Robot-002 需要多久保养一次",
+      "expected_intent": "maintenance_advice",
+      "expected_tools": ["get_device_status", "search_maintenance_manual"],
+      "expected_arguments": {"get_device_status": {"device_id": "Robot-002"}},
+      "notes": "Interval question, answerable only from documentation."
+    },
+    {
+      "id": "ma-006",
+      "category": "maintenance_advice",
+      "query": "码垛机器人抓取不准，维修步骤是什么",
+      "expected_intent": "maintenance_advice",
+      "expected_tools": ["get_device_status", "search_maintenance_manual"],
+      "expected_arguments": {"get_device_status": {"device_id": "Robot-002"}},
+      "notes": "Step-by-step repair request."
+    },
+
+    {
+      "id": "ro-001",
+      "category": "rag_only",
+      "query": "变频器直流母线过压一般是什么原因导致的",
+      "expected_intent": "maintenance_advice",
+      "expected_tools": ["search_maintenance_manual"],
+      "notes": "No device, no code. General causal knowledge, manual only."
+    },
+    {
+      "id": "ro-002",
+      "category": "rag_only",
+      "query": "伺服驱动器过载保护阈值如何设置",
+      "expected_intent": "maintenance_advice",
+      "expected_tools": ["search_maintenance_manual"],
+      "notes": "Configuration procedure with no structured coverage."
+    },
+    {
+      "id": "ro-003",
+      "category": "rag_only",
+      "query": "工业现场变频器日常巡检要注意什么",
+      "expected_intent": "maintenance_advice",
+      "expected_tools": ["search_maintenance_manual"],
+      "notes": "Inspection guidance. Deliberately phrased without the maintenance keywords the rule parser looks for, to measure keyword coverage rather than to flatter it."
+    },
+    {
+      "id": "ro-004",
+      "category": "rag_only",
+      "query": "PLC 输入模块损坏的原因有哪些",
+      "expected_intent": "maintenance_advice",
+      "expected_tools": ["search_maintenance_manual"],
+      "notes": "The bare token PLC is not a resolvable device id, so no status call is expected."
+    },
+    {
+      "id": "ro-005",
+      "category": "rag_only",
+      "query": "伺服电机异响如何排查",
+      "expected_intent": "maintenance_advice",
+      "expected_tools": ["search_maintenance_manual"],
+      "notes": "Troubleshooting knowledge with no device in scope."
+    },
+    {
+      "id": "ro-006",
+      "category": "rag_only",
+      "query": "How should I maintain the inverter cooling fan",
+      "expected_intent": "maintenance_advice",
+      "expected_tools": ["search_maintenance_manual"],
+      "notes": "English knowledge question, manual only."
+    },
+
+    {
+      "id": "mt-001",
+      "category": "multi_tool",
+      "query": "Robot-001 报 E0071，现在状态怎么样，具体怎么处理",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": ["get_device_status", "query_alarm_code", "search_maintenance_manual"],
+      "expected_arguments": {
+        "get_device_status": {"device_id": "Robot-001"},
+        "query_alarm_code": {"alarm_code": "E0071"}
+      },
+      "notes": "Full path: condition, code and handling."
+    },
+    {
+      "id": "mt-002",
+      "category": "multi_tool",
+      "query": "焊接机器人报警 E0071 了，请给出排查步骤",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": ["get_device_status", "query_alarm_code", "search_maintenance_manual"],
+      "expected_arguments": {
+        "get_device_status": {"device_id": "Robot-001"},
+        "query_alarm_code": {"alarm_code": "E0071"}
+      },
+      "notes": "Alias form of the full path."
+    },
+    {
+      "id": "mt-003",
+      "category": "multi_tool",
+      "query": "PLC-002 报 F0112，温度和压力是多少，应该怎么处理",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": ["get_device_status", "query_alarm_code", "search_maintenance_manual"],
+      "expected_arguments": {
+        "get_device_status": {"device_id": "PLC-002"},
+        "query_alarm_code": {"alarm_code": "F0112"}
+      },
+      "notes": "Asks for live metrics and handling in one request."
+    },
+    {
+      "id": "mt-004",
+      "category": "multi_tool",
+      "query": "CNC-001 主轴振动异常 F0302，如何处理",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": ["get_device_status", "query_alarm_code", "search_maintenance_manual"],
+      "expected_arguments": {
+        "get_device_status": {"device_id": "CNC-001"},
+        "query_alarm_code": {"alarm_code": "F0302"}
+      },
+      "notes": "Device, code and handling."
+    },
+    {
+      "id": "mt-005",
+      "category": "multi_tool",
+      "query": "Robot-002 运行正常吗，保养周期是多久",
+      "expected_intent": "maintenance_advice",
+      "expected_tools": ["get_device_status", "search_maintenance_manual"],
+      "expected_arguments": {"get_device_status": {"device_id": "Robot-002"}},
+      "notes": "Two-part request with no alarm code."
+    },
+    {
+      "id": "mt-006",
+      "category": "multi_tool",
+      "query": "PLC-001 温度 78 度是否偏高，需要维护吗",
+      "expected_intent": "maintenance_advice",
+      "expected_tools": ["get_device_status", "search_maintenance_manual"],
+      "expected_arguments": {"get_device_status": {"device_id": "PLC-001"}},
+      "notes": "Judgement question that needs the recorded value to compare against the stated one."
+    },
+    {
+      "id": "mt-007",
+      "category": "multi_tool",
+      "query": "灌装线PLC 报警 F0112 的严重等级是多少",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": ["get_device_status", "query_alarm_code"],
+      "expected_arguments": {
+        "get_device_status": {"device_id": "PLC-002"},
+        "query_alarm_code": {"alarm_code": "F0112"}
+      },
+      "notes": "Device plus code, but the only question asked is the severity, which the catalog carries. No manual search under P3."
+    },
+    {
+      "id": "mt-008",
+      "category": "multi_tool",
+      "query": "焊接机器人温度偏高且报 E0071，怎么处理",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": ["get_device_status", "query_alarm_code", "search_maintenance_manual"],
+      "expected_arguments": {
+        "get_device_status": {"device_id": "Robot-001"},
+        "query_alarm_code": {"alarm_code": "E0071"}
+      },
+      "notes": "Alias plus code plus handling."
+    },
+
+    {
+      "id": "am-001",
+      "category": "ambiguous",
+      "query": "PLC-001",
+      "expected_intent": "device_status",
+      "expected_tools": ["get_device_status"],
+      "expected_arguments": {"get_device_status": {"device_id": "PLC-001"}},
+      "notes": "Bare identifier. Reporting the device condition is the only sensible action."
+    },
+    {
+      "id": "am-002",
+      "category": "ambiguous",
+      "query": "PLC-999 报警了，怎么处理",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": ["get_device_status", "search_maintenance_manual"],
+      "expected_arguments": {"get_device_status": {"device_id": "PLC-999"}},
+      "notes": "Pattern-valid but unknown device. The tool must be called so the miss is reported rather than assumed, and no alarm code is present so the alarm tool has no valid argument."
+    },
+    {
+      "id": "am-003",
+      "category": "ambiguous",
+      "query": "设备好像不太对劲",
+      "expected_intent": "unknown",
+      "expected_tools": [],
+      "notes": "No device, no code, no actionable scope. Calling any tool would require inventing an argument."
+    },
+    {
+      "id": "am-004",
+      "category": "ambiguous",
+      "query": "这个报警什么意思",
+      "expected_intent": "alarm_diagnosis",
+      "expected_tools": [],
+      "notes": "Refers to an alarm that is not supplied. No tool has a valid argument, so the correct plan is empty."
+    },
+    {
+      "id": "am-005",
+      "category": "ambiguous",
+      "query": "需要保养了",
+      "expected_intent": "maintenance_advice",
+      "expected_tools": ["search_maintenance_manual"],
+      "notes": "No device named, but maintenance guidance is still retrievable; a status call would need an invented device id."
+    },
+
+    {
+      "id": "ood-001",
+      "category": "ood",
+      "query": "今天北京天气怎么样",
+      "expected_intent": null,
+      "expected_tools": [],
+      "notes": "Weather."
+    },
+    {
+      "id": "ood-002",
+      "category": "ood",
+      "query": "帮我写一首关于秋天的诗",
+      "expected_intent": null,
+      "expected_tools": [],
+      "notes": "Creative writing."
+    },
+    {
+      "id": "ood-003",
+      "category": "ood",
+      "query": "你好，你是谁",
+      "expected_intent": null,
+      "expected_tools": [],
+      "notes": "Chit-chat. \"你是谁\" must not read as a maintenance topic."
+    },
+    {
+      "id": "ood-004",
+      "category": "ood",
+      "query": "1234 乘以 5678 等于多少",
+      "expected_intent": null,
+      "expected_tools": [],
+      "notes": "Arithmetic. Digit runs must not be mistaken for identifiers."
+    },
+    {
+      "id": "ood-005",
+      "category": "ood",
+      "query": "推荐几部好看的科幻电影",
+      "expected_intent": null,
+      "expected_tools": [],
+      "notes": "Recommendation request."
+    },
+    {
+      "id": "ood-006",
+      "category": "ood",
+      "query": "我的汽车发动机报警灯亮了怎么办",
+      "expected_intent": null,
+      "expected_tools": [],
+      "notes": "Keyword bait: contains 报警 and 怎么办. A car engine is outside the covered equipment, so any tool call is unnecessary."
+    },
+    {
+      "id": "ood-007",
+      "category": "ood",
+      "query": "手机电池过热怎么办",
+      "expected_intent": null,
+      "expected_tools": [],
+      "notes": "Keyword bait: contains 过热 and 怎么办. Consumer electronics, not industrial equipment."
+    },
+    {
+      "id": "ood-008",
+      "category": "ood",
+      "query": "家里的空调不制冷了怎么处理",
+      "expected_intent": null,
+      "expected_tools": [],
+      "notes": "Keyword bait: contains 怎么处理. A domestic appliance, outside the knowledge base."
+    }
+  ]
+}
