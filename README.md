@@ -90,15 +90,20 @@ industrial-maintenance-agent/
 │   │   ├── session.py       # Engine + session factory
 │   │   ├── init_db.py       # Schema creation + seed helpers / CLI
 │   │   └── __main__.py      # `python -m app.database` entry point
-│   ├── tools/
-│   │   ├── names.py         # Canonical tool names (ToolName enum)
-│   │   ├── registry.py      # Tool registry, carries each tool's input model
-│   │   ├── arguments.py     # Strict argument validation, shared by both layers
-│   │   ├── device_tool.py   # get_device_status (Device ORM backed)
-│   │   ├── alarm_tool.py    # query_alarm_code (data/alarms.json backed)
-│   │   └── maintenance_manual_tool.py  # search_maintenance_manual (RAG backed)
-│   └── evaluation/
-│       └── metrics.py       # V0.2 placeholder scoring (superseded, see Agent evaluation)
+│   └── tools/
+│       ├── names.py         # Canonical tool names (ToolName enum)
+│       ├── registry.py      # Tool registry, carries each tool's input model
+│       ├── arguments.py     # Strict argument validation, shared by both layers
+│       ├── device_tool.py   # get_device_status (Device ORM backed)
+│       ├── alarm_tool.py    # query_alarm_code (data/alarms.json backed)
+│       └── maintenance_manual_tool.py  # search_maintenance_manual (RAG backed)
+├── evaluation/                  # The Agent evaluation framework (V0.6), the only one
+│   ├── dataset.json             # 49 hand-authored cases + ground-truth policy
+│   ├── dataset.py               # Dataset models and answer-key validation
+│   ├── metrics.py               # Metric primitives; a zero denominator is null
+│   ├── evaluator.py             # Per-case scoring and aggregation
+│   ├── runner.py                # CLI: planner-only / end-to-end, LLM gate
+│   └── reports/                 # Generated baselines and failure records
 ├── tests/
 │   ├── test_health.py           # Smoke tests
 │   ├── test_database.py         # Device model + init_db tests
@@ -115,13 +120,6 @@ industrial-maintenance-agent/
 │   ├── test_llm_planner.py      # Prompt, plan validation, error taxonomy
 │   ├── test_planner_modes.py    # rule / llm / auto, executor, API surface
 │   └── test_evaluation.py       # Dataset, metrics, OOD safety, CLI, LLM gate
-├── evaluation/                  # Agent evaluation framework (V0.6)
-│   ├── dataset.json             # 49 hand-authored cases + ground-truth policy
-│   ├── dataset.py               # Dataset models and answer-key validation
-│   ├── metrics.py               # Metric primitives; a zero denominator is null
-│   ├── evaluator.py             # Per-case scoring and aggregation
-│   ├── runner.py                # CLI: planner-only / end-to-end, LLM gate
-│   └── reports/                 # Generated baselines and failure records
 ├── data/
 │   ├── devices.json         # Device seed data
 │   ├── alarms.json          # Alarm code catalog
@@ -801,7 +799,13 @@ A software test and an agent evaluation answer different questions, and this
 project keeps them apart. `pytest` can assert that the rule planner returns
 `["get_device_status"]` for a query. It cannot tell you how often that is the right
 answer, how often the planner reaches for a tool nobody asked for, or whether it
-invents a tool name. The framework in `evaluation/` measures those.
+invents a tool name. The framework in `evaluation/`, at the repository root,
+measures those.
+
+The `evaluation/` package at the repository root is the only Agent Evaluation
+implementation in this project. An earlier `app/evaluation/` package held a
+V0.2 placeholder scorer and has been removed. Nothing imports it, and no runtime
+path reached it.
 
 ```bash
 # Planner only: fast, touches no tool, roughly 0.2 ms per case.
@@ -963,25 +967,20 @@ produced it.
    that the synthesis step writes.
 3. **Eight out-of-domain cases can show a weakness, not bound its rate.** A larger
    adversarial set is the only way to turn `0.375` into a defensible estimate.
-4. **`app/evaluation/metrics.py` is a superseded V0.2 placeholder.** Nothing
-   imports it, and the framework lives in `evaluation/`. Removing it is a follow-up
-   decision, and it is left in place rather than deleted silently.
 
 ## Roadmap
 
 1. Add device read endpoints backed by the `Device` model.
 2. Add an Alembic migration for schema versioning.
-3. Delete the superseded V0.2 placeholder `app/evaluation/metrics.py`. The real
-   framework now lives in `evaluation/` and nothing imports the placeholder.
-4. Run the LLM evaluation once a provider is configured, and publish the LLM
+3. Run the LLM evaluation once a provider is configured, and publish the LLM
    column next to the rule baseline. Until then the gate reports
    `LLM_EVALUATION_NOT_RUN`.
-5. Reduce manual retrieval latency. Measured against the four-document Rockwell
+4. Reduce manual retrieval latency. Measured against the four-document Rockwell
    corpus (4219 chunks), a manual query costs about 4.9 s in steady state, and the
    first query in a fresh process costs about 7.3 s while the module import and
    index load are paid. The light backend re-reads the index and re-fits its
    TF-IDF model per call. Caching belongs in the integration layer; the reported
    `latency_ms` states the real cost in the meantime.
-6. Add multi-turn planning: carry prior tool results into the planner prompt so a
+5. Add multi-turn planning: carry prior tool results into the planner prompt so a
    follow-up can build on what the previous turn retrieved.
-7. Add authentication to `/agent/invoke` before it is exposed beyond localhost.
+6. Add authentication to `/agent/invoke` before it is exposed beyond localhost.
