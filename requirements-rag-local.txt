@@ -1,0 +1,24 @@
+# Optional dependencies for RAG_PROVIDER=local.
+#
+# The local provider imports the Industrial Knowledge RAG retrieval engine
+# in-process (backend.light_rag_core.retrieve_docs) so the agent can retrieve
+# maintenance manual evidence without any LLM call.
+#
+# Install these only when you use that provider. The core agent runs without
+# them: the import is deferred until the first search_maintenance_manual call.
+#
+# Versions track the RAG repository's own backend/requirements.txt, so the
+# in-process import resolves against the versions the RAG system is tested with.
+#
+#   pypdf          PDF parsing, imported at backend.light_rag_core module level
+#   python-dotenv  imported by backend.llm_client / backend.runtime_config
+#   numpy          imported lazily inside light_rag_core numeric paths
+#   scikit-learn   imported lazily by _fit_index / _tfidf_candidates
+#
+# groq and openai are deliberately NOT required here. They are only needed by
+# the RAG answer generator, and the agent never calls it.
+
+pypdf>=6.16,<7
+python-dotenv>=1.2,<2
+numpy>=2.4,<3
+scikit-learn>=1.9,<2

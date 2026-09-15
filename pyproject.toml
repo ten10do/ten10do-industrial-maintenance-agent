@@ -1,0 +1,27 @@
+[project]
+name = "industrial-maintenance-agent"
+version = "0.5.0"
+description = "Industrial maintenance agent service built on FastAPI, LangGraph and Pydantic."
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# A FastAPI dependency in a signature default is the documented idiom, not the
+# mutable-default bug B008 is meant to catch.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.Body"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true

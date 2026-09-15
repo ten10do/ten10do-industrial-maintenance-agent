@@ -1,0 +1,43 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Virtual environments
+.venv/
+.venv-broken-*/
+venv/
+env/
+
+# Local data / databases
+data/*.db
+data/*.sqlite
+*.db
+*.sqlite
+
+# Logs
+*.log
+
+# Secrets and local config
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+
+# Assistant workspace state (session notes and local memory). Internal working
+# state rather than a software artifact, and it changes on every session, so it
+# is kept out of the tree.
+.workbuddy/
+
+# OS
+Thumbs.db
+.DS_Store

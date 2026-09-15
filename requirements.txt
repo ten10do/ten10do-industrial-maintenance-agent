@@ -1,0 +1,24 @@
+# Core runtime dependencies for Industrial Maintenance Agent
+# Target runtime: Python 3.11
+
+# --- Web service ---
+fastapi>=0.115,<0.120
+uvicorn[standard]>=0.30,<0.40
+
+# --- Agent workflow ---
+langgraph>=0.2,<0.4
+langchain-core>=0.3,<0.4
+langchain-openai>=0.2,<0.4
+
+# --- Data models / config ---
+pydantic>=2.7,<3.0
+pydantic-settings>=2.3,<3.0
+python-dotenv>=1.0,<2.0
+
+# --- Persistence ---
+SQLAlchemy>=2.0,<3.0
+alembic>=1.13,<2.0
+
+# --- Utilities ---
+httpx>=0.27,<0.29
+python-multipart>=0.0.9

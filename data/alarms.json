@@ -1,0 +1,85 @@
+[
+  {
+    "alarm_code": "F0045",
+    "name": "包装温控超限",
+    "description": "包装线热封单元温度持续高于上限，温控回路已触发保护。",
+    "severity": "warning",
+    "category": "temperature",
+    "possible_causes": [
+      "热封刀加热管老化导致功率漂移",
+      "热电偶安装松动或信号漂移",
+      "冷却风道积尘导致散热不足"
+    ],
+    "recommended_actions": [
+      "校验热电偶接线与温控回路增益",
+      "清洁冷却风道与散热片",
+      "温度仍超限时停机更换加热管"
+    ]
+  },
+  {
+    "alarm_code": "F0112",
+    "name": "灌装压力波动",
+    "description": "灌装线管路压力波动超出工艺窗口，计量精度存在偏差风险。",
+    "severity": "warning",
+    "category": "pressure",
+    "possible_causes": [
+      "管路密封件磨损导致微泄漏",
+      "压力传感器零点漂移",
+      "进料泵转速不稳定"
+    ],
+    "recommended_actions": [
+      "执行压力回路保压测试",
+      "重新标定压力传感器",
+      "检查进料泵变频器参数"
+    ]
+  },
+  {
+    "alarm_code": "E0071",
+    "name": "焊接机器人伺服过载",
+    "description": "焊接机器人关节伺服电流超出额定值，已触发过载保护停机。",
+    "severity": "critical",
+    "category": "motion",
+    "possible_causes": [
+      "减速机润滑不足导致阻力增大",
+      "焊枪线缆干涉产生附加负载",
+      "伺服驱动器参数与负载不匹配"
+    ],
+    "recommended_actions": [
+      "检查减速机润滑状态并补脂",
+      "排查焊枪线缆走线干涉",
+      "复核伺服驱动器电流限值参数"
+    ]
+  },
+  {
+    "alarm_code": "F0302",
+    "name": "主轴振动异常",
+    "description": "主轴振动幅值超过报警阈值，可能存在动平衡或轴承异常。",
+    "severity": "warning",
+    "category": "vibration",
+    "possible_causes": [
+      "刀具动平衡失效",
+      "主轴轴承磨损",
+      "刀柄锥面配合不良"
+    ],
+    "recommended_actions": [
+      "重新做刀具动平衡",
+      "检测主轴轴承游隙",
+      "清洁并检查刀柄锥面"
+    ]
+  },
+  {
+    "alarm_code": "W0100",
+    "name": "保养周期临近",
+    "description": "设备已接近计划保养周期，属于提示级信息，不触发停机。",
+    "severity": "info",
+    "category": "maintenance",
+    "possible_causes": [
+      "累计运行时长达到保养间隔",
+      "距上次保养时间超出计划窗口"
+    ],
+    "recommended_actions": [
+      "安排计划性保养窗口",
+      "核对润滑与紧固件清单"
+    ]
+  }
+]
