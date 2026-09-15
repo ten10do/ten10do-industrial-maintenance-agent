@@ -1,39 +1,114 @@
 # Industrial Maintenance Agent
 
-Agent service for industrial equipment maintenance assistance. V0.4 wires the
-Industrial Knowledge RAG repository in as a retrieval tool: the workflow is a
-fully deterministic `route_query -> plan_actions -> execute_tools ->
-retrieve_context -> synthesize` pipeline backed by the registry, and a rule-based
-parser. No LLM is involved at any stage.
+## Overview
 
-V0.4.2 exposes that pipeline over HTTP through `POST /agent/invoke`, behind an
+An HTTP service for industrial equipment maintenance assistance. It answers
+questions about registered equipment by calling deterministic tools, retrieving
+maintenance manual evidence, and rendering an answer from what those tools
+actually returned. The planner chooses which tools to call. The answer text is
+assembled from evidence rather than generated.
+
+### The problem
+
+A maintenance question normally needs three things at once. It needs the live
+state of one specific machine, the meaning and remedy of an alarm code, and the
+matching page of the equipment manual. A general-purpose chat assistant can
+produce fluent text about all three without being correct about any of them. A
+wrong torque figure or a wrong bearing clearance is a safety problem rather than a
+formatting problem. What is missing is not fluency. It is a bounded system whose
+answer can be traced back to a tool result or a retrieved document.
+
+### What the service does
+
+`POST /agent/invoke` runs a fixed five-stage workflow: `route_query` classifies
+the request, `plan_actions` selects tools and arguments, `execute_tools` runs
+them, `retrieve_context` pulls manual evidence, and `synthesize` renders the
+answer. Three deterministic tools sit behind a shared registry, covering device
+status from a SQLAlchemy model, alarm codes from a local catalog, and maintenance
+manual search against an external RAG engine.
+
+### Why this is not a chatbot
+
+1. **The LLM, when enabled, cannot write the answer.** It selects tools and
+   arguments and nothing else. It never sees retrieval results while planning and
+   never composes the response text. With `PLANNER_MODE=rule`, the default, there
+   is no LLM in the process at any stage.
+2. **The answer is rendered from evidence.** Every claim in the response comes
+   from a tool result or a retrieved document, and the same evidence is returned
+   alongside it in the `evidence` field.
+3. **Both planners emit the same validated plan.** The rule planner and the LLM
+   planner produce the same `AgentPlan` model, checked against the same registry
+   and the same argument models, so the executor cannot tell them apart. That
+   equivalence is what makes the comparison between them meaningful.
+4. **Failure is explicit.** A tool that cannot run reports `found=false` with an
+   `error`. A plan that fails validation raises a coded `PlannerError`. A missing
+   provider produces `LLM_PROVIDER_ERROR` naming the missing variable. Nothing is
+   silently downgraded and nothing is guessed.
+5. **The capability claim is measured.** The rule planner and a real external LLM
+   planner are both scored against a 49-case hand-authored answer key, and every
+   figure below comes from a recorded run under `evaluation/reports/`.
+
+### Headline results
+
+Rule planner, frozen, 49 cases, planner only:
+
+| Metric | Value |
+| ------ | ----- |
+| Intent accuracy | 0.9756 |
+| Tool selection exact match | 0.7959 |
+| Task success rate | 0.7959 |
+| Argument accuracy | 1.0000 |
+| Mean planning latency | 0.2103 ms |
+
+LLM planner (`openai_compatible`, `deepseek-flash`), mean of three independent
+49-case runs:
+
+| Metric | Value |
+| ------ | ----- |
+| Intent accuracy | 0.96748 |
+| Tool selection exact match | 0.80272 |
+| Task success rate | 0.78231 |
+| Tool precision | 0.94805 |
+| Tool recall | 0.90547 |
+| Unnecessary tool call rate | 0.05195 |
+| Mean planning latency | 1410.44 ms |
+| Tokens per case | 1094.40 |
+
+These are three runs, not a confidence interval, and the spread between them is
+published in full under [Evaluation and benchmarks](#evaluation-and-benchmarks).
+The dataset is a hand-authored reference, so it bounds neither planner in general.
+
+### Release history
+
+V0.4 wired the Industrial Knowledge RAG repository in as a retrieval tool: a fully
+deterministic `route_query -> plan_actions -> execute_tools -> retrieve_context ->
+synthesize` pipeline backed by the registry, with a rule-based parser and no LLM
+at any stage.
+
+V0.4.2 exposed that pipeline over HTTP through `POST /agent/invoke`, behind an
 `app/api` transport layer and an `AgentService` that owns request correlation,
-latency measurement, state translation and logging. The workflow itself is
-unchanged.
+latency measurement, state translation and logging. The workflow is unchanged.
 
-V0.5 adds an optional LLM planner alongside the frozen rule planner. The planner
-decides which tools to call and with which arguments; it never writes the answer
-and never produces evidence. The final answer stays deterministic and grounded in
-what the tools actually returned. The default configuration,
-`PLANNER_MODE=rule`, leaves V0.4 behaviour untouched: with no provider configured
-the pipeline is still entirely LLM-free.
+V0.5 added an optional LLM planner alongside the frozen rule planner. The planner
+decides which tools to call and with which arguments. The default configuration,
+`PLANNER_MODE=rule`, leaves the earlier behaviour untouched.
 
-V0.6 adds an agent evaluation framework. It is separate from `tests/` on purpose:
-a software test asserts that the code does what the specification says, and it
-cannot tell you how often the plan is the right plan. The framework measures agent
-capability against a hand-authored answer key, so the rule planner's intent
-accuracy, tool selection and argument handling are quantified instead of assumed.
-The baseline is produced by running the real planner over the real dataset. No stub
-is scored, and no number is reported that was not measured.
+V0.6 added an agent evaluation framework, kept separate from `tests/` on purpose.
+A software test asserts that the code does what the specification says. It cannot
+tell you how often the plan is the right plan. The framework measures agent
+capability against a hand-authored answer key, and the baseline is produced by
+running the real planner over the real dataset. No stub is scored, and no number
+is reported that was not measured.
 
-V0.7 extends that framework to a real LLM planner benchmark. It adds a Rule versus
-LLM comparison that refuses to approximate, a latency distribution with a documented
-p95 convention, and the gate that stops a stub from standing in for a provider. The
-benchmark has since been run against a real external provider (`openai_compatible`,
-model `deepseek-flash`): 49 cases, planner-only, no tool execution. The LLM column,
-the comparison deltas and the out-of-domain comparison are published below. Every
-number comes from the recorded run under `evaluation/reports/`; none is estimated,
-inferred or invented.
+V0.7 extended the framework to a real LLM planner benchmark: a Rule versus LLM
+comparison that refuses to approximate, a latency distribution with a documented
+p95 convention, and a gate that stops a stub from standing in for a provider.
+V0.7.1 hardened it with a three-run stability study, provider-reported token
+usage, and a measured before-and-after fix to the end-to-end retrieval path.
+
+V0.8 is the public release candidate: repository audit, container packaging, a
+documented architecture, and version alignment across the tree. No planner
+behaviour and no benchmark number changed in this version.
 
 ## Stack
 
@@ -48,6 +123,60 @@ inferred or invented.
 | LLM client    | `httpx`, optional and configured off by default |
 | Testing       | pytest + httpx TestClient                     |
 | Agent eval    | `evaluation/`: hand-authored dataset + metric harness |
+
+
+## Architecture
+
+The service is layered, and the layering is held by dependency direction rather
+than by convention. A request enters at the transport layer, is handed to the
+service layer, and is executed by a LangGraph workflow. The planner sits between
+parsing and execution. The tools sit behind a registry, and the two optional
+external dependencies, the LLM provider and the RAG provider, sit behind their
+own interfaces so neither can reach into the workflow.
+
+```mermaid
+flowchart LR
+    C["Client"] --> API["FastAPI transport<br/>app/api"]
+    API --> SVC["AgentService<br/>app/services"]
+    SVC --> WF["LangGraph workflow<br/>app/agent"]
+    WF --> P{"Planner"}
+    P -->|rule| R["Rule planner"]
+    P -->|llm or auto| L["LLM planner"]
+    L -.-> PROV["LLM provider<br/>optional"]
+    WF --> REG["Tool registry<br/>app/tools"]
+    REG --> T1["get_device_status"]
+    REG --> T2["query_alarm_code"]
+    REG --> T3["search_maintenance_manual"]
+    T1 --> DB[("SQLite")]
+    T2 --> AJ[("data/alarms.json")]
+    T3 -.-> RAG["RAG provider<br/>optional"]
+    WF --> EV["Evidence + deterministic synthesis"]
+    EV --> API
+```
+
+Dotted edges are inactive by default. The LLM provider needs `PLANNER_MODE=llm` or
+`auto` plus credentials, and the RAG provider needs `RAG_PROVIDER` to be
+configured.
+
+The full set of diagrams, including the request lifecycle, the planner decision
+path, the evidence flow and the module boundary table, is in
+[docs/architecture.md](docs/architecture.md).
+
+Three design decisions are worth stating explicitly.
+
+**Planning is single-shot.** There is no re-planning loop after tool execution. A
+plan that names an unavailable tool is reported as a failure rather than retried,
+because a retry would make the plan depend on execution results and the
+planner-only benchmark would stop being a measurement of planning.
+
+**The answer is not model-written.** Synthesis renders text from results. This is
+what allows the `evidence` field to be an actual provenance record rather than a
+list of documents that were merely retrieved.
+
+**The optional dependencies are genuinely optional.** The core service runs with
+no provider, no credential and no RAG checkout. A deferred import keeps the RAG
+engine out of the process until the first manual search, so an unused integration
+costs nothing at startup.
 
 ## Project layout
 
@@ -139,13 +268,19 @@ industrial-maintenance-agent/
 │   ├── rag_build_knowledge_base.py  # Build the RAG light index from a corpus
 │   ├── rag_retrieval_probe.py       # Run retrieval-only queries, no LLM
 │   └── llm_planner_probe.py         # Real LLM planner smoke gate, no fabrication
+├── docs/
+│   └── architecture.md      # Component map, request lifecycle, planner path
 ├── requirements.txt             # Runtime dependencies
 ├── requirements-dev.txt         # Dev / test dependencies
 ├── requirements-rag-local.txt   # Optional deps for RAG_PROVIDER=local
 ├── pyproject.toml           # Project metadata + tool config
-├── .env.example             # Environment template
+├── Dockerfile               # Unprivileged image, no secret baked in
+├── .dockerignore            # Keeps .env, caches and working state out of the context
+├── docker-compose.yml       # Single service, named volume, health check
+├── .env.example             # Environment template, placeholders only
 └── README.md
 ```
+
 
 ## Getting started
 
@@ -162,11 +297,75 @@ source .venv/Scripts/activate
 pip install -r requirements-dev.txt
 ```
 
-Create a local environment file:
+## Configuration
+
+All configuration is environment based, read through `pydantic-settings`. Start
+from the template:
 
 ```bash
 cp .env.example .env
 ```
+
+`.env` is gitignored, and the ignore rule covers every `.env.*` variant except the
+template, so a stray `.env.txt` or `.env.backup` cannot be committed.
+`.env.example` contains placeholders only.
+
+### Application
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `APP_NAME` | `Industrial Maintenance Agent` | FastAPI title and `GET /` identity |
+| `APP_VERSION` | package version | Reported by `GET /` and `/openapi.json` |
+| `ENVIRONMENT` | `development` | Deployment label |
+| `DEBUG` | `true` | Uvicorn reload |
+| `LOG_LEVEL` | `INFO` | Verbosity for the `app` logger namespace; an unknown value fails at startup |
+| `HOST` | `0.0.0.0` | Bind address for the development entry point |
+| `PORT` | `8000` | Bind port for the development entry point |
+| `DATABASE_URL` | `sqlite:///./data/industrial_maintenance.db` | SQLAlchemy URL |
+| `AUTO_CREATE_TABLES` | `true` | Create missing tables on startup |
+
+### Planner
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `PLANNER_MODE` | `rule` | `rule`, `llm` or `auto`. See [planner modes](#modes) |
+
+With `PLANNER_MODE=rule` the four `LLM_*` variables below are unused and the
+pipeline is entirely LLM-free. Nothing needs to be unset for that to hold.
+
+### LLM provider
+
+Required only when `PLANNER_MODE` is `llm` or `auto`.
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `LLM_BASE_URL` | empty | API root of an OpenAI-compatible endpoint, for example `https://host/v1`. No host is assumed |
+| `LLM_API_KEY` | empty | Secret, held as `SecretStr` and read only when the request header is built |
+| `LLM_MODEL` | empty | Model identifier sent in the request body |
+| `LLM_TIMEOUT_SECONDS` | `30` | Upper bound on one provider call |
+| `LLM_TEMPERATURE` | `0` | Sampling temperature |
+
+No vendor SDK is used, so any endpoint that speaks OpenAI-style chat completions
+works. An incomplete configuration surfaces as `LLM_PROVIDER_ERROR` naming the
+missing variable rather than as a request to an invented endpoint.
+
+### RAG integration
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `RAG_PROVIDER` | `local` | `local` runs the retrieval engine in-process; `http` calls a RAG service |
+| `RAG_REPO_ROOT` | empty | Required for `local`. Path to a RAG checkout. No default path is assumed |
+| `RAG_BACKEND` | `light` | `light` (`light_rag_core`) or `full` (`rag_core`) |
+| `RAG_KNOWLEDGE_BASE_ID` | `default` | Knowledge base identifier registered inside the RAG service |
+| `RAG_RETRIEVAL_MODE` | `hybrid` | `lexical`, `vector` or `hybrid` |
+| `RAG_TOP_K` | `4` | Default hit limit for `search_maintenance_manual` |
+| `RAG_BASE_URL` | empty | Required for `http`. No default host or port is assumed |
+| `RAG_TIMEOUT_SECONDS` | `10` | Upper bound on one RAG call |
+| `RAG_HTTP_MODEL_PROVIDER` | `DeepSeek` | Passed to the RAG service. The agent discards its generated answer and keeps the retrieval evidence only |
+
+Nothing about the host, port, timeout, knowledge base id or repository path is
+hardcoded. A misconfigured provider raises at construction time, and the tool
+surfaces it through `error` rather than returning an empty result.
 
 ## Running the service
 
@@ -187,6 +386,70 @@ Interactive API docs are served at `/docs` and `/redoc`; the raw schema is at
 
 > The RAG service documents port `8000` as well. When both services run on the
 > same host, change one of them; the agent never assumes a port.
+
+### Docker
+
+The image runs the deterministic planner by default, so it needs no credential.
+It runs as an unprivileged user and writes SQLite to a named volume.
+
+```bash
+docker build -t industrial-maintenance-agent:0.8.0 .
+docker run --rm -p 8000:8000 industrial-maintenance-agent:0.8.0
+```
+
+With Compose:
+
+```bash
+docker compose up --build
+```
+
+The container exposes port `8000`; `GET /health` is used as the health check, so
+an unhealthy container is one where the application itself is not answering.
+
+Two properties of the image are deliberate.
+
+No secret is baked in. `.dockerignore` excludes `.env` and every `.env.*` variant,
+and the Dockerfile copies neither the template nor any local configuration. When
+the optional LLM planner is enabled, the key is supplied at run time through the
+environment.
+
+The RAG integration stays opt-in. `RAG_PROVIDER=local` needs a RAG checkout, so
+`docker-compose.yml` ships the mount line commented out and read-only. Uncomment
+it, point `RAG_REPO_ROOT` at the mount point, and the container still never writes
+to it:
+
+```yaml
+volumes:
+  - /path/to/industrial-knowledge-rag:/rag:ro
+```
+
+### Database
+
+SQLite is the default backend. The `Device` ORM model lives in
+`app/database/models.py` and exposes these fields: `id`, `device_id`,
+`device_name`, `device_type`, `location`, `status`, `temperature`, `pressure`,
+`rpm`, `alarm_code`, `last_maintenance_time`.
+
+#### Initialize the database
+
+```bash
+# Create tables and seed data/devices.json
+python -m app.database
+
+# Drop existing tables, recreate them, then seed
+python -m app.database --reset
+
+# Create tables only
+python -m app.database --no-seed
+```
+
+The same CLI is also available as `python -m app.database.init_db`.
+
+Seeding upserts by `device_id`, so repeated runs are idempotent. The service
+also creates missing tables on startup when `AUTO_CREATE_TABLES=true` (default).
+The seed file `data/devices.json` ships with `PLC-001`, `PLC-002`, `Robot-001`
+plus two additional devices.
+
 
 ## API
 
@@ -365,32 +628,125 @@ latency and maps the final state onto the response schema. `app/agent` holds the
 workflow, unaware that HTTP exists. The compiled graph is therefore reachable
 through exactly one route.
 
-## Database
+### Demo examples
 
-SQLite is the default backend. The `Device` ORM model lives in
-`app/database/models.py` and exposes these fields: `id`, `device_id`,
-`device_name`, `device_type`, `location`, `status`, `temperature`, `pressure`,
-`rpm`, `alarm_code`, `last_maintenance_time`.
+Both responses below were captured from a local run with `PLANNER_MODE=rule` and
+no LLM provider configured, so the plan comes from the deterministic planner.
+Nothing is retyped or hand-edited. `request_id` is per invocation and is left out
+here, and `latency_ms` varies with the machine.
 
-### Initialize the database
+#### Example 1: Chinese device status question
 
 ```bash
-# Create tables and seed data/devices.json
-python -m app.database
-
-# Drop existing tables, recreate them, then seed
-python -m app.database --reset
-
-# Create tables only
-python -m app.database --no-seed
+curl -s -X POST http://127.0.0.1:8000/agent/invoke \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "PLC-001 \u73b0\u5728\u4ec0\u4e48\u72b6\u6001\uff1f"}'
 ```
 
-The same CLI is also available as `python -m app.database.init_db`.
+Response:
 
-Seeding upserts by `device_id`, so repeated runs are idempotent. The service
-also creates missing tables on startup when `AUTO_CREATE_TABLES=true` (default).
-The seed file `data/devices.json` ships with `PLC-001`, `PLC-002`, `Robot-001`
-plus two additional devices.
+```json
+{
+  "query": "PLC-001 现在什么状态？",
+  "intent": "device_status",
+  "equipment_id": "PLC-001",
+  "alarm_code": null,
+  "tools_called": [
+    "get_device_status"
+  ],
+  "planner_used": "rule",
+  "planner_fallback": false,
+  "answer": "【设备状态】\n设备编号与名称：PLC-001（包装线PLC）\n设备类型：PLC\n安装位置：车间A-包装线\n当前状态：running\n关键状态：温度 78.0，压力 0.62，转速 0.0\n报警码：F0045\n最近保养时间：2026-08-20T09:30:00\n\n【报警信息】\n本次未查询报警信息。\n\n【维护手册证据】\n本次未检索维护手册。",
+  "evidence": [
+    {
+      "source_type": "tool",
+      "source": "sqlite:devices",
+      "tool_name": "get_device_status",
+      "content": "设备 PLC-001（包装线PLC）：状态 running，温度 78.0，压力 0.62，转速 0.0，报警码 F0045。",
+      "document": null,
+      "page": null,
+      "score": null,
+      "score_semantics": null,
+      "higher_is_better": null
+    }
+  ],
+  "latency_ms": 9.82
+}
+```
+
+#### Example 2: English drive manual question
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/agent/invoke \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "How do I repair a PowerFlex 520 drive motor overload?"}'
+```
+
+Response. The retrieved passages come from a private benchmark corpus, so their
+text is omitted here and only the retrieval structure is shown. The first call in
+a fresh process pays the index load, so this is a steady-state call.
+
+```json
+{
+  "query": "How do I repair a PowerFlex 520 drive motor overload?",
+  "intent": "maintenance_advice",
+  "equipment_id": null,
+  "alarm_code": null,
+  "tools_called": [
+    "search_maintenance_manual"
+  ],
+  "planner_used": "rule",
+  "planner_fallback": false,
+  "answer": "【设备状态】\n本次未查询设备状态。\n\n【报警信息】\n本次未查询报警信息。\n\n【维护手册证据】\n命中 4 条片段（provider：local，检索模式：hybrid）。\n- [1] PowerFlex_527_User_Manual.pdf | 第 112 页 | 章节 Chapter 7          Troubleshooting | chunk chunk-2220272857d5e74e5c5f1f23 | 相关度 0.7198033332824707（vector_cosine_distance，越小越相关）\n  正文摘录：<retrieved passage text omitted: the source corpus is a private benchmark set>\n- [2] PowerFlex_520_User_Manual.pdf | 第 161 页 | 章节 Chapter 4          Troubleshooting | chunk chunk-d8799e8084cfa994950bd19c | 相关度 0.6929119825363159（vector_cosine_distance，越小越相关）\n  正文摘录：<retrieved passage text omitted: the source corpus is a private benchmark set>\n- [3] PowerFlex_520_User_Manual.pdf | 第 84 页 | 章节 Chapter 3          Programming and Parameters | chunk chunk-10f8c731435483ce93e094c4 | 相关度 0.720583975315094（vector_cosine_distance，越小越相关）\n  正文摘录：<retrieved passage text omitted: the source corpus is a private benchmark set>\n- [4] PowerFlex_520_User_Manual.pdf | 第 7 页 | 章节 Appendix K | chunk chunk-d971f0ac41578616462f0657 | 相关度 0.7283151149749756（vector_cosine_distance，越小越相关）\n  正文摘录：<retrieved passage text omitted: the source corpus is a private benchmark set>",
+  "evidence": [
+    {
+      "source_type": "document",
+      "source": "PowerFlex_527_User_Manual.pdf",
+      "tool_name": "search_maintenance_manual",
+      "content": "<retrieved passage text omitted: the source corpus is a private benchmark set>",
+      "document": "PowerFlex_527_User_Manual.pdf",
+      "page": 112,
+      "score": 0.7198033332824707,
+      "score_semantics": "vector_cosine_distance",
+      "higher_is_better": false
+    },
+    {
+      "source_type": "document",
+      "source": "PowerFlex_520_User_Manual.pdf",
+      "tool_name": "search_maintenance_manual",
+      "content": "<retrieved passage text omitted: the source corpus is a private benchmark set>",
+      "document": "PowerFlex_520_User_Manual.pdf",
+      "page": 161,
+      "score": 0.6929119825363159,
+      "score_semantics": "vector_cosine_distance",
+      "higher_is_better": false
+    },
+    {
+      "source_type": "document",
+      "source": "PowerFlex_520_User_Manual.pdf",
+      "tool_name": "search_maintenance_manual",
+      "content": "<retrieved passage text omitted: the source corpus is a private benchmark set>",
+      "document": "PowerFlex_520_User_Manual.pdf",
+      "page": 84,
+      "score": 0.720583975315094,
+      "score_semantics": "vector_cosine_distance",
+      "higher_is_better": false
+    },
+    {
+      "source_type": "document",
+      "source": "PowerFlex_520_User_Manual.pdf",
+      "tool_name": "search_maintenance_manual",
+      "content": "<retrieved passage text omitted: the source corpus is a private benchmark set>",
+      "document": "PowerFlex_520_User_Manual.pdf",
+      "page": 7,
+      "score": 0.7283151149749756,
+      "score_semantics": "vector_cosine_distance",
+      "higher_is_better": false
+    }
+  ],
+  "latency_ms": 294.103
+}
+```
 
 ## Tools
 
@@ -418,6 +774,7 @@ return the output model with `found=False`, which keeps dispatch logic in the
 graph free of exception handling. Alarm codes are matched
 case-insensitively. `register_default_tools()` is idempotent, so the registry can
 be rebuilt in tests without duplicate registration errors.
+
 
 ## RAG integration
 
@@ -491,12 +848,12 @@ entry point. Nothing is reimplemented here.
 ```bash
 # 1. Build the light index from a corpus directory of real PDFs.
 python scripts/rag_build_knowledge_base.py \
-  --rag-repo-root D:/industrial-knowledge-rag \
-  --corpus-dir D:/industrial-knowledge-rag/backend/evaluation/benchmark_private/documents
+  --rag-repo-root /path/to/industrial-knowledge-rag \
+  --corpus-dir /path/to/industrial-knowledge-rag/backend/evaluation/benchmark_private/documents
 
 # 2. Run retrieval-only queries against the built index.
 python scripts/rag_retrieval_probe.py \
-  --rag-repo-root D:/industrial-knowledge-rag \
+  --rag-repo-root /path/to/industrial-knowledge-rag \
   --query "PowerFlex 520 drive F007 motor overload" \
   --top-k 5
 ```
@@ -530,7 +887,10 @@ surfaces it through `error` rather than returning an empty result.
 pip install -r requirements-rag-local.txt   # only for RAG_PROVIDER=local
 ```
 
-## Query parsing
+
+## Agent workflow and planner modes
+
+### Query parsing
 
 `app/agent/parser.py` is a deterministic rule-based parser. It performs no LLM
 or network call. It extracts two entities and classifies the request. All device
@@ -556,7 +916,8 @@ Identifiers that match a pattern but are absent from the catalog are returned
 verbatim, so the device tool can report `found=False` rather than the parser
 silently dropping them. When several candidates appear, the first match wins.
 
-## Agent workflow
+
+### Rule planning and synthesis
 
 `app/agent/graph.py` defines a linear LangGraph topology with five nodes. The
 graph is compiled lazily through `get_graph()` so importing the module stays
@@ -582,7 +943,7 @@ print(final["required_tools"])
 print(final["final_answer"])
 ```
 
-### Rule planner rules
+#### Rule planner rules
 
 The frozen baseline, used when `PLANNER_MODE=rule` and as the fallback in `auto`:
 
@@ -592,7 +953,7 @@ The frozen baseline, used when `PLANNER_MODE=rule` and as the fallback in `auto`
 | `alarm_code` present | `query_alarm_code` |
 | `intent` is `alarm_diagnosis` or `maintenance_advice` | `search_maintenance_manual` |
 
-### Argument mapping
+#### Argument mapping
 
 In rule mode the executor derives arguments from state through adapters that live
 in the agent layer, so the tools stay unaware of the state shape. In LLM mode the
@@ -604,7 +965,7 @@ planner supplies the arguments and the same input models validate them.
 | `query_alarm_code` | `alarm_code` | `alarm_code` |
 | `search_maintenance_manual` | `query` (falls back to `equipment_id` + `alarm_code`) | `query` |
 
-### Synthesis and evidence
+#### Synthesis and evidence
 
 `retrieve_context` builds one `Evidence` record per tool result, and
 `search_maintenance_manual` hits become `source_type=document` records that
@@ -617,7 +978,8 @@ and an unavailable knowledge base is reported as unavailable. Cause and action
 sections are omitted rather than invented, and an unavailable retrieval produces
 no citable document evidence.
 
-## LLM planner (optional)
+
+### LLM planner (optional)
 
 The LLM planner is additive. It is off by default, it is not required for any
 behaviour in this document, and enabling it does not change the executor, the
@@ -636,7 +998,7 @@ The division of labour is the whole design:
 The model chooses tools and arguments. It cannot produce a diagnosis, an answer
 or an evidence record, because the plan schema has no field for them.
 
-### Modes
+#### Modes
 
 | `PLANNER_MODE` | Behaviour on planning failure |
 | -------------- | ----------------------------- |
@@ -655,7 +1017,7 @@ Every path records `planner_used`, `planner_fallback` and, on a fallback,
 recorded as `UNEXPECTED_PLANNER_ERROR` rather than mislabelled as a provider
 fault.
 
-### Provider
+#### Provider
 
 `app/integrations/llm/` talks to any OpenAI-compatible
 `POST {LLM_BASE_URL}/chat/completions` endpoint over `httpx`. No vendor SDK is
@@ -675,7 +1037,7 @@ Three properties are load-bearing and test-enforced:
    provider never returns an empty completion, which a planner could otherwise
    read as "the model planned nothing".
 
-### Tool schemas have one definition
+#### Tool schemas have one definition
 
 Each registry entry carries the tool's own Pydantic input model. The JSON Schema
 handed to the model is produced by `model_json_schema()` from that same model, and
@@ -694,7 +1056,7 @@ available_tool_definitions()[0]
 # {'name': 'get_device_status', 'description': '...', 'parameters': {...}}
 ```
 
-### Validation chain
+#### Validation chain
 
 A model response is usable only after it clears four gates, in order:
 
@@ -710,7 +1072,7 @@ A failure at any gate raises a `PlannerError` with one of five codes:
 `TOOL_ARGUMENT_VALIDATION_FAILED`. Nothing is repaired, defaulted or guessed: a
 plan that needs repair is a plan the planner refuses.
 
-### Configuration
+#### Configuration
 
 ```bash
 PLANNER_MODE=rule           # rule | llm | auto
@@ -726,7 +1088,7 @@ pipeline is entirely LLM-free. In `llm` or `auto` mode an incomplete
 configuration surfaces as `LLM_PROVIDER_ERROR` naming the missing variable,
 instead of a request to an invented endpoint.
 
-### Smoke test
+#### Smoke test
 
 ```bash
 python -m scripts.llm_planner_probe
@@ -738,7 +1100,7 @@ measured latency. With no provider configured it reports
 `REAL_LLM_GATE_NOT_RUN` and makes no call: it does not fabricate a plan or a
 latency figure. It never prints the prompt, the raw completion or the key.
 
-### Known limits
+#### Known limits
 
 1. **No fallback in `llm` mode.** A provider outage makes `POST /agent/invoke`
    return 500. Use `auto` where availability matters more than a guaranteed LLM
@@ -761,57 +1123,8 @@ latency figure. It never prints the prompt, the raw completion or the key.
 7. **No authentication on the endpoint.** `/agent/invoke` is unauthenticated and
    must not be exposed beyond localhost.
 
-## Testing
 
-```bash
-pytest
-ruff check app tests evaluation scripts
-ruff format --check app tests evaluation scripts
-mypy app tests evaluation
-```
-
-The RAG provider tests exercise both providers against contract-faithful
-payloads, so no test needs a live RAG service or a built knowledge base. The API
-tests stub the provider for the same reason and additionally pin the request
-bounds, the response contract, the failure body and the log fields.
-
-The planner tests are hermetic in the same way. `tests/fake_llm.py` supplies a
-provider double that records the requests it received, so the planner, the mode
-dispatcher and the API can all be driven without a network or a credential. No
-planner test opens a socket.
-
-Two test details are worth knowing. The API tests seed an in-memory SQLite
-database through `StaticPool`: the route runs in a worker thread, and an
-in-memory database is otherwise private to the connection that created it.
-`tests/test_pipeline.py` needs no such pin because it calls the graph directly.
-And `app/services/__init__.py` exports the agent-dependent service lazily, because
-the agent layer imports `app.services.device_catalog`; an eager import there would
-make the import order decide whether a module loads.
-
-`tests/test_evaluation.py` is where the framework is tested. Most of it drives the
-metric primitives and the per-case evaluator with synthetic observations, so it
-needs neither a database nor a network. One module-scoped fixture runs the real
-rule planner over the real dataset once, and the checks then read that single
-report. That fixture is deliberate: the honest failures of the frozen baseline are
-pinned by case id, so a change that makes them pass fails the suite.
-
-`tests/test_planner_comparison.py` covers the comparison. It checks that the metric
-table keeps every metric including the ones where the LLM reads worse, that the delta
-sign is unambiguous on the `lower_is_better` metrics, that a mismatched dataset is
-refused with both hashes named, and that a missing LLM baseline produces a refusal
-instead of a file of nulls. No evaluation test contacts a provider, so the whole
-suite stays hermetic and runs without a credential.
-
-### Manual check
-
-```bash
-uvicorn app.main:app --host 127.0.0.1 --port 8123
-curl -s http://127.0.0.1:8123/health
-curl -s -X POST http://127.0.0.1:8123/agent/invoke \
-  -H "Content-Type: application/json" -d '{"query": "PLC-001 现在什么状态"}'
-```
-
-## Agent evaluation (V0.6 and V0.7)
+## Evaluation and benchmarks
 
 A software test and an agent evaluation answer different questions, and this
 project keeps them apart. `pytest` can assert that the rule planner returns
@@ -843,6 +1156,42 @@ retrieval never runs and the whole dataset costs a fraction of a second. This is
 the mode to use when comparing planners. An end-to-end run continues into the
 executor, the evidence step and the synthesis step, and additionally records
 execution and retrieval latency.
+
+### Summary
+
+This section reports two planners over one frozen dataset of 49 hand-authored
+cases, planner only, with no tool execution. The rule planner is deterministic, so
+its single run is its result. The LLM planner is not, so its figures are the mean
+of three independent runs and every individual run is published alongside them.
+
+| Metric | Rule | LLM (mean of 3) | Delta |
+| ------ | ---- | --------------- | ----- |
+| Intent accuracy | 0.97561 | 0.96748 | -0.00813 |
+| Tool selection exact match | 0.79592 | 0.80272 | +0.00680 |
+| Tool precision | 0.88000 | 0.94805 | +0.06805 |
+| Tool recall | 0.98507 | 0.90547 | -0.07960 |
+| Unnecessary tool call rate | 0.12000 | 0.05195 | -0.06805 |
+| Task success rate | 0.79592 | 0.78231 | -0.01361 |
+| Planner failure rate | 0.00000 | 0.00680 | +0.00680 |
+| Mean planning latency | 0.21027 ms | 1410.44 ms | +1410.23 ms |
+
+Read as a whole the comparison is close, and the disagreement is concentrated
+rather than spread. The LLM planner selects fewer unnecessary tools and is more
+precise per call, while the rule planner recalls more of the expected tools and
+never fails to produce a valid plan. Both land on the same task success rate band,
+and the LLM planner costs roughly four orders of magnitude more planning latency
+for it.
+
+The out-of-domain result is the one place where the two differ in kind. Over the
+eight adversarial cases the rule planner calls a tool in 3 of 8 (`ood-006`,
+`ood-007`, `ood-008`), and the LLM planner calls one in 0, 1 and 1 of 8 across the
+three runs. Safe handling of out-of-domain input is therefore a property that
+appears reliably under the LLM planner and only sometimes under the rule planner.
+Three runs bound that difference weakly, and a larger adversarial set is the only
+way to turn it into a rate.
+
+No number here is estimated, back-filled or selected from a set of attempts. The
+scope is this dataset, this registry and this provider endpoint.
 
 ### Dataset
 
@@ -1234,6 +1583,58 @@ input that produced it.
 5. **One dataset and one model.** The comparison covers 49 hand-authored cases with a
    single provider and model. It bounds neither planner on other queries, and the token
    and latency figures describe this endpoint rather than the provider in general.
+
+
+## Testing
+
+```bash
+pytest
+ruff check app tests evaluation scripts
+ruff format --check app tests evaluation scripts
+mypy app tests evaluation
+```
+
+The RAG provider tests exercise both providers against contract-faithful
+payloads, so no test needs a live RAG service or a built knowledge base. The API
+tests stub the provider for the same reason and additionally pin the request
+bounds, the response contract, the failure body and the log fields.
+
+The planner tests are hermetic in the same way. `tests/fake_llm.py` supplies a
+provider double that records the requests it received, so the planner, the mode
+dispatcher and the API can all be driven without a network or a credential. No
+planner test opens a socket.
+
+Two test details are worth knowing. The API tests seed an in-memory SQLite
+database through `StaticPool`: the route runs in a worker thread, and an
+in-memory database is otherwise private to the connection that created it.
+`tests/test_pipeline.py` needs no such pin because it calls the graph directly.
+And `app/services/__init__.py` exports the agent-dependent service lazily, because
+the agent layer imports `app.services.device_catalog`; an eager import there would
+make the import order decide whether a module loads.
+
+`tests/test_evaluation.py` is where the framework is tested. Most of it drives the
+metric primitives and the per-case evaluator with synthetic observations, so it
+needs neither a database nor a network. One module-scoped fixture runs the real
+rule planner over the real dataset once, and the checks then read that single
+report. That fixture is deliberate: the honest failures of the frozen baseline are
+pinned by case id, so a change that makes them pass fails the suite.
+
+`tests/test_planner_comparison.py` covers the comparison. It checks that the metric
+table keeps every metric including the ones where the LLM reads worse, that the delta
+sign is unambiguous on the `lower_is_better` metrics, that a mismatched dataset is
+refused with both hashes named, and that a missing LLM baseline produces a refusal
+instead of a file of nulls. No evaluation test contacts a provider, so the whole
+suite stays hermetic and runs without a credential.
+
+### Manual check
+
+```bash
+uvicorn app.main:app --host 127.0.0.1 --port 8123
+curl -s http://127.0.0.1:8123/health
+curl -s -X POST http://127.0.0.1:8123/agent/invoke \
+  -H "Content-Type: application/json" -d '{"query": "PLC-001 现在什么状态"}'
+```
+
 
 ## Roadmap
 

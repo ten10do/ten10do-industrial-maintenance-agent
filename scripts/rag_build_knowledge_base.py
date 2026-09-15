@@ -5,7 +5,7 @@ project's own ingestion and indexing entry point
 (``light_rag_core.build_knowledge_base``), so parsing, chunking, embedding and
 index persistence all stay owned by the RAG project.
 
-Read-only guarantees with respect to ``D:\\industrial-knowledge-rag``:
+Read-only guarantees with respect to the RAG repository checkout:
 
 * no Python source, requirements, README, ``.env`` or Git metadata is touched;
 * the only artifact written is the light index JSON under the RAG repository's
@@ -14,7 +14,7 @@ Read-only guarantees with respect to ``D:\\industrial-knowledge-rag``:
 
 Usage::
 
-    python scripts/rag_build_knowledge_base.py --rag-repo-root D:/industrial-knowledge-rag
+    python scripts/rag_build_knowledge_base.py --rag-repo-root /path/to/industrial-knowledge-rag
 
 Environment variable values are never printed. If importing the RAG package
 pulls the RAG ``.env`` into this process (``backend.llm_client`` calls

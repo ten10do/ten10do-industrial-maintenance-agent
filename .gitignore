@@ -24,10 +24,11 @@ data/*.sqlite
 # Logs
 *.log
 
-# Secrets and local config
+# Secrets and local config. Every env file is ignored except the placeholder
+# template, so a stray ".env.txt" or ".env.backup" cannot be committed.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # IDE
 .idea/

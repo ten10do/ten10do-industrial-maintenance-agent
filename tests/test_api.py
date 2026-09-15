@@ -178,7 +178,7 @@ def test_root_endpoint_reports_the_current_version() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "ok"
-    assert payload["version"] == "0.7.0"
+    assert payload["version"] == "0.8.0"
 
 
 def test_http_surface_exposes_only_the_documented_routes() -> None:

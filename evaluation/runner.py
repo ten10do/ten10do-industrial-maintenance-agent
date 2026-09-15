@@ -514,7 +514,7 @@ def build_reports(
 
     run = RunMetadata(
         generated_at=_utc_now(),
-        dataset_path=str(dataset_path),
+        dataset_path=_portable_dataset_path(dataset_path),
         dataset_sha256=dataset_sha256(dataset_path),
         dataset_case_count=len(dataset.cases),
         dataset_category_counts=dataset.category_counts,
@@ -645,6 +645,25 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _portable_dataset_path(path: Path) -> str:
+    """Record the dataset path so a published report carries no machine layout.
+
+    A dataset inside this repository is stored relative to the repository root,
+    which keeps the record portable and free of the author's absolute paths. A
+    dataset outside the repository is stored resolved, because no
+    repository-relative form exists for it. The dataset SHA-256, not this
+    string, is what pins the exact input behind a number.
+    """
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(_REPO_ROOT).as_posix()
+    except ValueError:
+        return str(resolved)
+
+
 def _write(path: Path, payload: BaseModel) -> None:
     """Write a report model as UTF-8 JSON, creating the directory if needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -696,7 +715,7 @@ def main(argv: list[str] | None = None) -> int:
                 status=STATUS_LLM_NOT_RUN,
                 planner_mode=planner.value,
                 generated_at=_utc_now(),
-                dataset_path=str(dataset_path),
+                dataset_path=_portable_dataset_path(dataset_path),
                 dataset_sha256=dataset_sha256(dataset_path),
                 dataset_case_count=len(dataset.cases),
                 reason=f"the LLM planner could not be built: {exc.code_value}",

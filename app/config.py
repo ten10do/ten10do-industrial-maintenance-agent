@@ -24,7 +24,7 @@ class Settings(BaseSettings):
 
     # Application
     app_name: str = "Industrial Maintenance Agent"
-    app_version: str = "0.7.0"
+    app_version: str = "0.8.0"
     environment: str = "development"
     debug: bool = False
     # Verbosity for the ``app`` logger namespace. A mistyped value fails loudly

@@ -1,0 +1,47 @@
+# Build context exclusions. Keep the context free of secrets, VCS data, caches
+# and local working state.
+
+# Version control
+.git
+.gitignore
+
+# Local environment and secrets. Only the placeholder template is allowed
+# through, and the Dockerfile does not copy it into the image.
+.env
+.env.*
+!.env.example
+
+# Virtual environments
+.venv
+.venv-broken-*
+venv
+env
+
+# Python caches and build output
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Local data and logs (the seed JSON files stay in context)
+*.db
+*.sqlite
+*.log
+data/*.db
+
+# Assistant workspace state
+.workbuddy
+
+# Container and documentation files are not needed inside the image
+Dockerfile
+.dockerignore
+docker-compose.yml
+docs
+
+# OS noise
+Thumbs.db
+.DS_Store

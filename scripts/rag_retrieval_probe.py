@@ -11,7 +11,7 @@ with the retrieval mode that produced them.
 Usage::
 
     python scripts/rag_retrieval_probe.py \
-        --rag-repo-root D:/industrial-knowledge-rag \
+        --rag-repo-root /path/to/industrial-knowledge-rag \
         --query "CompactLogix 5380 controller" \
         --query "PowerFlex 527 fault code" \
         --top-k 5
