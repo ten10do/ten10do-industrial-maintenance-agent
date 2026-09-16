@@ -1,15 +1,28 @@
 # Compose file for the Industrial Maintenance Agent.
 #
-# The default configuration runs the deterministic rule planner and needs no
-# credential. The optional LLM planner and the optional RAG integration are
-# documented as commented environment entries below and are off by default.
+# Two services, and only one of them is started by a plain "up":
+#
+#   agent      the default standalone agent. Deterministic rule planner, no
+#              credential, no RAG checkout.
+#   agent-rag  the optional RAG-enabled agent. Behind the "rag" profile, so it
+#              is built and started only when that profile is named.
+#
+#   docker compose up -d                  -> agent
+#   docker compose --profile rag up -d agent-rag   -> agent-rag
+#
+# The RAG service needs the optional local dependency set baked into its image,
+# which is what the INSTALL_RAG_DEPS build argument below selects. Mounting the
+# RAG checkout alone is not sufficient.
 
 services:
   agent:
     build:
       context: .
       dockerfile: Dockerfile
-    image: industrial-maintenance-agent:0.8.3
+      args:
+        # Default shape: core dependencies only.
+        INSTALL_RAG_DEPS: "0"
+    image: industrial-maintenance-agent:0.8.4
     container_name: industrial-maintenance-agent
     ports:
       - "8000:8000"
@@ -32,18 +45,62 @@ services:
       #   LLM_MODEL: your-model
       #   LLM_API_KEY: ${LLM_API_KEY:?set LLM_API_KEY in your shell before enabling the LLM planner}
 
-      # --- Optional RAG integration ---
-      # RAG_PROVIDER: local
-      # RAG_REPO_ROOT: /rag
-      # RAG_BACKEND: light
-      # RAG_RETRIEVAL_MODE: hybrid
-
     volumes:
       # Database and any generated runtime data.
       - agent-data:/app/data
-      # To enable RAG_PROVIDER=local, mount a RAG checkout read-only and point
-      # RAG_REPO_ROOT at the mount point. The container never writes to it.
-      # - /path/to/industrial-knowledge-rag:/rag:ro
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/health', timeout=3).read()",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+    restart: unless-stopped
+
+  agent-rag:
+    profiles: ["rag"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # RAG shape: adds requirements-rag-local.txt on top of the core set.
+        INSTALL_RAG_DEPS: "1"
+    image: industrial-maintenance-agent:0.8.4-rag
+    container_name: industrial-maintenance-agent-rag
+    ports:
+      # Separate host port so both services can run side by side.
+      - "${RAG_HOST_PORT:-8001}:8000"
+    environment:
+      PLANNER_MODE: rule
+      LOG_LEVEL: INFO
+
+      DATABASE_URL: sqlite:///./data/industrial_maintenance.db
+      AUTO_CREATE_TABLES: "true"
+
+      # --- RAG integration ---
+      # The local provider imports the retrieval engine from the mounted
+      # checkout in-process. It needs the optional dependency set, which this
+      # service's image installs.
+      RAG_PROVIDER: local
+      RAG_REPO_ROOT: /rag
+      RAG_BACKEND: light
+      RAG_RETRIEVAL_MODE: hybrid
+
+    volumes:
+      # Separate database volume so the two services never share a file.
+      - agent-rag-data:/app/data
+      # Read-only bind mount of an external Industrial Knowledge RAG checkout.
+      # The container never writes to it. Set RAG_HOST_REPO to your local clone;
+      # the default assumes a sibling directory next to this repository and is
+      # a placeholder, not a real location.
+      - ${RAG_HOST_REPO:-../industrial-knowledge-rag}:/rag:ro
 
     healthcheck:
       test:
@@ -62,3 +119,4 @@ services:
 
 volumes:
   agent-data:
+  agent-rag-data:

@@ -8,3 +8,11 @@ pytest-cov>=5.0,<7.0
 # --- Tooling ---
 ruff>=0.5,<0.9
 mypy>=1.10,<2.0
+
+# --- Test-only parsing ---
+# Used by tests/test_docker_config.py to read docker-compose.yml structurally.
+# It already arrives transitively through uvicorn[standard]; declared here so the
+# Docker configuration tests do not depend on that transitive path. The stub
+# package is what mypy needs, since PyYAML ships no inline annotations.
+pyyaml>=6.0,<7.0
+types-PyYAML>=6.0,<7.0

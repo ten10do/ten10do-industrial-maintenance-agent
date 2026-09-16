@@ -126,6 +126,19 @@ workflow that mirrors the local quality gates, repository description and
 topics, and published release notes. No planner behaviour and no benchmark
 number changed in this version.
 
+V0.8.3 was a cross-platform patch. The RAG provider derived a document name with
+`Path(...).name`, which does not split Windows separators on POSIX, so the same
+test passed locally and failed on the Linux CI runner. Document name extraction
+is now explicit about both separators. No planner behaviour and no benchmark
+number changed.
+
+V0.8.4 makes the Docker RAG path reproducible. The published image installs the
+core requirements only, while the local RAG provider additionally needs the
+optional dependency set, so mounting a RAG checkout turned out to be necessary
+but not sufficient. A build argument now selects a RAG-enabled image, Compose
+exposes it behind a discoverable profile, and both shapes are runtime-validated.
+No planner behaviour and no benchmark number changed.
+
 ## Stack
 
 | Concern       | Choice                                        |
@@ -275,7 +288,8 @@ industrial-maintenance-agent/
 │   ├── test_llm_planner.py      # Prompt, plan validation, error taxonomy
 │   ├── test_planner_modes.py    # rule / llm / auto, executor, API surface
 │   ├── test_evaluation.py       # Dataset, metrics, OOD safety, CLI, LLM gate
-│   └── test_planner_comparison.py  # rule vs LLM delta, refusals, hash lock
+│   ├── test_planner_comparison.py  # rule vs LLM delta, refusals, hash lock
+│   └── test_docker_config.py    # Docker build shapes: standalone vs RAG guard
 ├── data/
 │   ├── devices.json         # Device seed data
 │   ├── alarms.json          # Alarm code catalog
@@ -287,7 +301,9 @@ industrial-maintenance-agent/
 ├── docs/
 │   ├── architecture.md      # Component map, request lifecycle, planner path
 │   └── releases/            # Published release notes
-│       └── v0.8.2.md
+│       ├── v0.8.2.md
+│       ├── v0.8.3.md
+│       └── v0.8.4.md
 ├── .github/
 │   └── workflows/ci.yml     # Hermetic CI: pytest + ruff + mypy, no secrets
 ├── LICENSE                  # MIT
@@ -295,9 +311,9 @@ industrial-maintenance-agent/
 ├── requirements-dev.txt         # Dev / test dependencies
 ├── requirements-rag-local.txt   # Optional deps for RAG_PROVIDER=local
 ├── pyproject.toml           # Project metadata + tool config
-├── Dockerfile               # Unprivileged image, no secret baked in
+├── Dockerfile               # Unprivileged image; INSTALL_RAG_DEPS selects a shape
 ├── .dockerignore            # Keeps .env, caches and working state out of the context
-├── docker-compose.yml       # Single service, named volume, health check
+├── docker-compose.yml       # agent plus agent-rag behind the "rag" profile
 ├── .env.example             # Environment template, placeholders only
 └── README.md
 ```
@@ -413,9 +429,18 @@ Interactive API docs are served at `/docs` and `/redoc`; the raw schema is at
 The image runs the deterministic planner by default, so it needs no credential.
 It runs as an unprivileged user and writes SQLite to a named volume.
 
+There are two build shapes from this one Dockerfile, selected by the
+`INSTALL_RAG_DEPS` build argument and exposed as two Compose services.
+
+#### A. Standalone
+
+Covers everything the agent does with structured tool calls: the device tool,
+the alarm tool, the rule planner and the FastAPI service. It needs no LLM key
+and no Industrial Knowledge RAG checkout.
+
 ```bash
-docker build -t industrial-maintenance-agent:0.8.3 .
-docker run --rm -p 8000:8000 industrial-maintenance-agent:0.8.3
+docker build -t industrial-maintenance-agent:0.8.4 .
+docker run --rm -p 8000:8000 industrial-maintenance-agent:0.8.4
 ```
 
 With Compose:
@@ -427,22 +452,61 @@ docker compose up --build
 The container exposes port `8000`; `GET /health` is used as the health check, so
 an unhealthy container is one where the application itself is not answering.
 
-Two properties of the image are deliberate.
-
 No secret is baked in. `.dockerignore` excludes `.env` and every `.env.*` variant,
 and the Dockerfile copies neither the template nor any local configuration. When
 the optional LLM planner is enabled, the key is supplied at run time through the
 environment.
 
-The RAG integration stays opt-in. `RAG_PROVIDER=local` needs a RAG checkout, so
-`docker-compose.yml` ships the mount line commented out and read-only. Uncomment
-it, point `RAG_REPO_ROOT` at the mount point, and the container still never writes
-to it:
+This shape deliberately omits the optional RAG dependency set. `numpy`,
+`scikit-learn` and `pypdf` are absent from it. That is the intended state, not a
+defect, and it keeps the default image small.
 
-```yaml
-volumes:
-  - /path/to/industrial-knowledge-rag:/rag:ro
+#### B. RAG-enabled
+
+Local RAG requires optional dependencies. Mounting the repository is necessary
+but not sufficient: the local provider imports the retrieval engine in-process,
+and that import needs the packages listed in `requirements-rag-local.txt`. The
+default build installs `requirements.txt` only, so a standalone container answers
+a manual query with the manual tool reported as unavailable.
+
+The RAG build shape adds that dependency file through `INSTALL_RAG_DEPS=1`, and
+`requirements-rag-local.txt` is installed **only** in that shape. Nothing else
+differs, and the standalone shape is untouched.
+
+Full sequence, starting from a clean machine:
+
+```bash
+# 1. Clone the Industrial Knowledge RAG system outside this repository.
+git clone <industrial-knowledge-rag-url> ../industrial-knowledge-rag
+
+# 2. Point the host path at that checkout. The default is a sibling directory
+#    named industrial-knowledge-rag, so this line is only needed when the
+#    checkout lives elsewhere. No host path is hardcoded in the tracked files.
+export RAG_HOST_REPO=/absolute/path/to/industrial-knowledge-rag
+
+# 3. Build and start the RAG service. The profile keeps it out of a plain "up".
+docker compose --profile rag up -d --build agent-rag
+
+# 4. That checkout is bind-mounted read-only at /rag and the service reads its
+#    index from there. The container never writes to it.
+
+# 5. Seed the device database so the device tool has rows to find.
+docker compose --profile rag exec agent-rag python -m app.database
+
+# 6. Ask a question that requires manual evidence.
+curl -s -X POST http://127.0.0.1:8001/agent/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"query": "How do I repair a PowerFlex 520 drive motor overload?"}'
 ```
+
+A working RAG run reports `search_maintenance_manual` in `tools_called`, no
+`internal_error`, and a non-empty `evidence` list carrying `document`, `page`
+and `score` for each hit. If the manual tool instead comes back unavailable, the
+image is missing the optional dependency set or the mount is wrong.
+
+The mount line uses `${RAG_HOST_REPO:-../industrial-knowledge-rag}:/rag:ro`. The
+default is a placeholder pointing at a sibling directory, not a real location,
+and the `:ro` suffix is what keeps the checkout read-only inside the container.
 
 ### Database
 

@@ -9,6 +9,19 @@
 # Nothing secret is copied. ".env" and every ".env.*" variant are excluded by
 # .dockerignore; only ".env.example", which holds placeholders, is readable in
 # the build context and it is not copied into the image either.
+#
+# Two build shapes come out of this one file, selected by a build argument:
+#
+#   INSTALL_RAG_DEPS=0  (default)  core agent only.
+#   INSTALL_RAG_DEPS=1             additionally installs
+#                                  requirements-rag-local.txt, which the local
+#                                  RAG provider needs to import the retrieval
+#                                  engine in-process.
+#
+# The default shape stays small: numpy, scikit-learn and pypdf are never
+# installed unless INSTALL_RAG_DEPS=1 is passed explicitly. The external
+# Industrial Knowledge RAG checkout is mounted at run time and is never copied
+# into the image.
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -22,9 +35,23 @@ RUN groupadd --system --gid 10001 app \
 
 WORKDIR /app
 
-# Dependencies first, so editing application source does not invalidate this layer.
+# Dependencies first, so editing application source does not invalidate this
+# layer. Both requirement files are copied so the optional set is available to
+# the conditional install below.
 COPY requirements.txt ./
-RUN pip install --no-cache-dir --requirement requirements.txt
+COPY requirements-rag-local.txt ./
+
+# Selects the build shape. Declared next to its use so a change in the value
+# invalidates only the install layer.
+ARG INSTALL_RAG_DEPS=0
+
+# The core set is always installed. The optional RAG set is installed only when
+# INSTALL_RAG_DEPS=1, so the default image never carries numpy, scikit-learn or
+# pypdf.
+RUN pip install --no-cache-dir --requirement requirements.txt \
+    && if [ "${INSTALL_RAG_DEPS}" = "1" ]; then \
+           pip install --no-cache-dir --requirement requirements-rag-local.txt; \
+       fi
 
 # Application source and the data the tools read. No tests and no caches.
 COPY pyproject.toml README.md ./
