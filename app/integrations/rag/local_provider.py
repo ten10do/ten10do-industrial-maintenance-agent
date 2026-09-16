@@ -22,6 +22,7 @@ Two side effects of importing the RAG package are worth stating explicitly:
 from __future__ import annotations
 
 import importlib
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,25 @@ def _as_page(value: Any) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         return None
     return value + 1
+
+
+def _document_name(value: Any) -> str | None:
+    """Return the file name carried by a corpus ``source`` value.
+
+    The corpus metadata is written on the corpus side and routinely holds
+    Windows separators, so this must not depend on the host separator the way
+    ``Path(value).name`` does: on POSIX that returns the whole
+    ``D:\\manuals\\guide.pdf`` string unchanged instead of ``guide.pdf``. Both
+    separators are therefore treated as separators here, which makes the mapping
+    identical on every platform. A missing or blank source maps to ``None``
+    rather than to an empty string.
+    """
+    if value is None:
+        return None
+    text = str(value).strip().rstrip("\\/")
+    if not text:
+        return None
+    return re.split(r"[\\/]", text)[-1] or None
 
 
 class LocalRAGProvider(RAGProvider):
@@ -111,8 +131,7 @@ class LocalRAGProvider(RAGProvider):
         """Map one upstream ``(document, score)`` pair onto a transport model."""
         metadata = getattr(document, "metadata", None) or {}
 
-        document_name = metadata.get("source")
-        document_name = Path(str(document_name)).name if document_name else None
+        document_name = _document_name(metadata.get("source"))
 
         page = _as_page(metadata.get("page"))
         if page is None:
