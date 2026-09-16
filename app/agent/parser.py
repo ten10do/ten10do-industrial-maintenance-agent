@@ -11,7 +11,9 @@ Extraction strategy:
 
 1. A ``PREFIX-123`` pattern is matched and canonicalized through the device
    catalog, so ``plc-001`` and ``robot-001`` map back to ``PLC-001`` and
-   ``Robot-001``.
+   ``Robot-001``. A two-segment prefix such as ``METRO-APU-001`` is matched
+   whole, so a deployment that carries an externally sourced device is addressed
+   by its full identifier.
 2. If no identifier pattern is present, device names are resolved as aliases, so
    ``包装线PLC`` resolves to ``PLC-001``.
 3. Alarm codes are matched by the ``LETTER1234`` pattern and upper-cased.
@@ -29,7 +31,15 @@ from app.services.device_catalog import canonicalize_device_id, resolve_device_a
 
 # ASCII-aware boundaries. ``\b`` cannot be used because Python treats CJK
 # characters as word characters, so "F0045怎么办" would not match at all.
-_DEVICE_ID_PATTERN = re.compile(r"(?<![A-Za-z0-9])([A-Za-z]{2,}-\d{3,})(?![A-Za-z0-9])")
+#
+# An identifier is either a single segment (``PLC-001``) or a segment pair
+# (``METRO-APU-001``). The optional middle segment is required for the second
+# form: without it the engine cannot start at the first letter, skips ahead and
+# matches only the tail, which would look a real device up under a truncated
+# identifier.
+_DEVICE_ID_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9])([A-Za-z]{2,}(?:-[A-Za-z]{2,})?-\d{3,})(?![A-Za-z0-9])"
+)
 _ALARM_CODE_PATTERN = re.compile(r"(?<![A-Za-z0-9])([A-Za-z]\d{4})(?![A-Za-z0-9])")
 
 ALARM_KEYWORDS = ("报警", "告警", "警报", "故障", "alarm", "alert", "fault")

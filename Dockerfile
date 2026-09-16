@@ -54,9 +54,15 @@ RUN pip install --no-cache-dir --requirement requirements.txt \
        fi
 
 # Application source and the data the tools read. No tests and no caches.
+#
+# The data copy names its two files instead of taking the directory. An external
+# dataset placed under data/ would otherwise be baked into the image, which is
+# both a size problem and a redistribution problem: the MetroPT-3 CSV is about
+# 208 MiB and this project does not ship it. .dockerignore excludes that
+# directory as well, so the context stays small even before the copy runs.
 COPY pyproject.toml README.md ./
 COPY app ./app
-COPY data ./data
+COPY data/devices.json data/alarms.json ./data/
 COPY evaluation ./evaluation
 COPY scripts ./scripts
 

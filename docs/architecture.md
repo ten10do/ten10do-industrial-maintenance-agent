@@ -61,6 +61,7 @@ flowchart TB
     subgraph Integrations["Integration layer: app/integrations"]
         LLMProvider["LLM provider<br/>OpenAI-compatible"]
         RAGProvider["RAG provider<br/>local or http"]
+        DeviceSource["device data source<br/>external adapter, optional"]
     end
 
     DB[("SQLite<br/>Device ORM")]
@@ -162,7 +163,7 @@ The validation chain has four gates and five error codes:
 ```mermaid
 flowchart TB
     Plan["AgentPlan tool calls"] --> Exec["Executor"]
-    Exec --> D["get_device_status<br/>SQLAlchemy Device ORM"]
+    Exec --> D["get_device_status<br/>seed rows, or an external source"]
     Exec --> A["query_alarm_code<br/>data/alarms.json"]
     Exec --> M["search_maintenance_manual<br/>RAG provider"]
 
@@ -182,6 +183,16 @@ LLM. `search_maintenance_manual` is the only tool with an optional external
 dependency, and when the RAG provider cannot run it returns `found=false` with an
 `error` rather than an empty result, so an unavailable knowledge base cannot be
 mistaken for a knowledge base with no match.
+
+`get_device_status` is answered by two sources selected on the identifier: the
+seeded SQLite rows, which own every identifier they define, and any external
+adapter configured for the process, which owns its own identifiers only. An
+adapter that claims an identifier but cannot be read produces `found=false` with
+an `error`, which keeps three outcomes apart: the device is unknown, the source is
+broken, or the device was found. The tool contract, the registered name and the
+planner are identical whichever source answers, and detection of the external
+device is case-insensitive while the answer reports the source's own canonical
+identifier.
 
 ## 6. Module boundaries
 

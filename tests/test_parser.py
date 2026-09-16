@@ -42,6 +42,32 @@ def test_parse_device_name_aliases() -> None:
     assert parse_query("灌装线PLC 压力如何").equipment_id == "PLC-002"
 
 
+def test_parse_two_segment_device_id_is_matched_whole() -> None:
+    """An externally sourced device uses a two-segment prefix.
+
+    The tail of such an identifier also looks like a complete identifier, so
+    this pins that the leading segment is not dropped.
+    """
+    assert parse_query("METRO-APU-001 当前设备状态怎么样？").equipment_id == "METRO-APU-001"
+    assert parse_query("metro-apu-001 状态").equipment_id == "metro-apu-001"
+
+
+def test_two_segment_pattern_does_not_change_single_segment_parsing() -> None:
+    """Widening the pattern must leave every existing identifier form intact."""
+    cases = [
+        ("PLC-001", "PLC-001"),
+        ("Robot-001 状态", "Robot-001"),
+        ("CNC-001 需要保养", "CNC-001"),
+        ("PLC-999 什么状态", "PLC-999"),
+    ]
+
+    for text, expected in cases:
+        assert parse_query(text).equipment_id == expected, text
+
+    # A lone letter before the separator is still not an identifier.
+    assert parse_query("A-001 状态").equipment_id is None
+
+
 def test_parse_unknown_device_id_is_kept_verbatim() -> None:
     # Unknown identifiers are returned so the device tool can report found=False.
     assert parse_query("PLC-999 什么状态").equipment_id == "PLC-999"

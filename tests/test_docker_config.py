@@ -33,6 +33,8 @@ RAG_REQUIREMENTS = PROJECT_ROOT / "requirements-rag-local.txt"
 STANDALONE_SERVICE = "agent"
 RAG_SERVICE = "agent-rag"
 RAG_PROFILE = "rag"
+REAL_DATA_SERVICE = "agent-real-data"
+REAL_DATA_PROFILE = "real-data"
 
 _DRIVE_LETTER_PATH = re.compile(r"^[A-Za-z]:[\\/]")
 
@@ -69,6 +71,17 @@ def _ignore_patterns() -> list[str]:
         if line and not line.startswith("#"):
             patterns.append(line)
     return patterns
+
+
+def _mount_target(mount: str) -> str:
+    """Return the container path of a Compose volume entry.
+
+    The source may itself contain a colon, because an interpolated default can
+    carry one, so the split happens from the right after the access mode is
+    removed rather than from the left.
+    """
+    without_mode = mount.rsplit(":", 1)[0] if mount.endswith((":ro", ":rw")) else mount
+    return without_mode.rsplit(":", 1)[-1]
 
 
 @pytest.fixture(scope="module")
@@ -196,3 +209,98 @@ class TestComposeShapes:
             for mount in service.get("volumes", []):
                 assert not _DRIVE_LETTER_PATH.match(mount), (name, mount)
                 assert not mount.startswith("/"), (name, mount)
+
+
+class TestRealDataShape:
+    """The MetroPT-3 dataset must arrive through a mount, never through a build.
+
+    The dataset is about 208 MiB, is licensed rather than owned by this project,
+    and is not redistributed here. So the contract is: a profile-gated service,
+    a read-only mount, a host path that is configurable, and no extra build
+    shape. A regression would either bloat the image or ship data this project
+    must not ship.
+    """
+
+    def test_real_data_service_is_behind_the_real_data_profile(
+        self, services: dict[str, Any]
+    ) -> None:
+        assert REAL_DATA_SERVICE in services, sorted(services)
+        assert services[REAL_DATA_SERVICE].get("profiles") == [REAL_DATA_PROFILE]
+
+    def test_only_the_standalone_service_starts_by_default(self, services: dict[str, Any]) -> None:
+        """Profiles are what keep a plain ``up`` from needing external inputs."""
+        unprofiled = [name for name, service in services.items() if not service.get("profiles")]
+        assert unprofiled == [STANDALONE_SERVICE], unprofiled
+
+    def test_dataset_is_read_through_the_mount(self, services: dict[str, Any]) -> None:
+        """The configured path must live inside the mounted directory."""
+        environment = services[REAL_DATA_SERVICE]["environment"]
+        configured = environment["METROPT3_CSV_PATH"]
+        targets = [_mount_target(m) for m in services[REAL_DATA_SERVICE]["volumes"]]
+        assert any(configured.startswith(f"{target}/") for target in targets), (
+            configured,
+            targets,
+        )
+
+    def test_dataset_mount_is_read_only(self, services: dict[str, Any]) -> None:
+        mounts = services[REAL_DATA_SERVICE]["volumes"]
+        dataset_mounts = [m for m in mounts if m.endswith(":/external-data:ro")]
+        assert len(dataset_mounts) == 1, mounts
+
+    def test_dataset_mount_source_is_configurable_not_hardcoded(
+        self, services: dict[str, Any]
+    ) -> None:
+        """The dataset path differs per machine, so it is an input, not a constant."""
+        mount = next(
+            m for m in services[REAL_DATA_SERVICE]["volumes"] if m.endswith(":/external-data:ro")
+        )
+        source = mount[: -len(":/external-data:ro")]
+        assert source.startswith("${METROPT3_HOST_DIR:-"), source
+        assert source.endswith("}"), source
+
+    def test_real_data_service_reuses_the_standalone_image(self, services: dict[str, Any]) -> None:
+        """No second build shape: the payload is data, not a dependency."""
+        real_data = services[REAL_DATA_SERVICE]
+        assert real_data["image"] == services[STANDALONE_SERVICE]["image"]
+        assert real_data["build"]["args"]["INSTALL_RAG_DEPS"] == "0"
+
+    def test_real_data_service_does_not_share_a_database_volume(
+        self, services: dict[str, Any]
+    ) -> None:
+        """Two services on one SQLite file is a corruption path, not a saving."""
+        real_data_mounts = services[REAL_DATA_SERVICE]["volumes"]
+        assert any(
+            m.startswith("agent-real-data-data:") for m in real_data_mounts
+        ), real_data_mounts
+        assert not any(m.startswith("agent-data:") for m in real_data_mounts), real_data_mounts
+
+    def test_dataset_is_not_baked_into_the_image(self) -> None:
+        """The dataset must not be copied, and must not even reach the context.
+
+        A directory-wide data copy is the failure mode this guards. The CSV
+        would then be baked in twice, once by the copy and once by the
+        ownership change that follows it, so the image would grow by hundreds of
+        megabytes while every instruction still reads as if nothing had changed.
+        """
+        copied = [i for i in _dockerfile_instructions() if i.startswith("COPY")]
+        joined = " ".join(copied)
+        assert "metropt3" not in joined.lower(), joined
+        assert ".csv" not in joined, joined
+        assert not any(i.split()[-2:] == ["data", "./data"] for i in copied), copied
+
+    def test_runtime_data_files_are_copied_by_name(self) -> None:
+        """Narrowing the copy must not drop a data file read at run time."""
+        copied = " ".join(i for i in _dockerfile_instructions() if i.startswith("COPY"))
+        assert "data/devices.json" in copied, copied
+        assert "data/alarms.json" in copied, copied
+
+    def test_external_dataset_directory_is_outside_the_build_context(self) -> None:
+        """The exclusion keeps every build small, whatever the COPY lines say."""
+        patterns = _ignore_patterns()
+        assert "data/external" in patterns, patterns
+
+    def test_dataset_payload_is_ignored_by_versions_control(self) -> None:
+        """The dataset must not be committable by accident."""
+        ignore = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
+        assert "data/external/metropt3/*.csv" in ignore
+        assert "data/external/metropt3/*.zip" in ignore

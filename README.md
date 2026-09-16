@@ -29,8 +29,9 @@ answer can be traced back to a tool result or a retrieved document.
 the request, `plan_actions` selects tools and arguments, `execute_tools` runs
 them, `retrieve_context` pulls manual evidence, and `synthesize` renders the
 answer. Three deterministic tools sit behind a shared registry, covering device
-status from a SQLAlchemy model, alarm codes from a local catalog, and maintenance
-manual search against an external RAG engine.
+status from a SQLAlchemy model or a configured external sensor dataset, alarm
+codes from a local catalog, and maintenance manual search against an external RAG
+engine.
 
 ### Why this is not a chatbot
 
@@ -82,6 +83,12 @@ LLM planner (`openai_compatible`, `deepseek-flash`), mean of three independent
 These are three runs, not a confidence interval, and the spread between them is
 published in full under [Evaluation and benchmarks](#evaluation-and-benchmarks).
 The dataset is a hand-authored reference, so it bounds neither planner in general.
+
+V0.8.5 also adds a real-data device integration, validated by three integration
+gates against the real MetroPT-3 file. Those gates check one record, and the
+dataset carries no ground-truth equipment state, so they are deliberately not
+reported as a row above. What they do and do not establish is in
+[docs/evaluation/real_data_integration.md](docs/evaluation/real_data_integration.md).
 
 ### Release history
 
@@ -138,6 +145,28 @@ optional dependency set, so mounting a RAG checkout turned out to be necessary
 but not sufficient. A build argument now selects a RAG-enabled image, Compose
 exposes it behind a discoverable profile, and both shapes are runtime-validated.
 No planner behaviour and no benchmark number changed.
+
+V0.8.5 adds a second device data source backed by a public real-world dataset:
+the UCI MetroPT-3 air production unit, served under `METRO-APU-001` through the
+existing `get_device_status` tool with no schema change and no new tool. Status is
+derived from documented control contacts and always labelled as derived, since
+the dataset publishes no ground-truth equipment state. The dataset is never
+downloaded at run time, never enters the image, and is read through a bounded tail
+window rather than parsed whole. The rule planner needed one lexer change to
+recognise a two-segment identifier; its effect on the frozen benchmark was
+measured before and after and is zero on all nine metrics.
+
+### Device data sources
+
+| Source | Identifiers | Nature | Evidence source |
+| ------ | ----------- | ------ | --------------- |
+| Seeded SQLite rows | `PLC-001`, `PLC-002`, `Robot-001`, `Robot-002`, `CNC-001` | Deterministic demo fixtures, written for this repository | `sqlite:devices` |
+| UCI MetroPT-3 | `METRO-APU-001` | Real 1 Hz readings from a metro train air production unit, CC BY 4.0, configured through `METROPT3_CSV_PATH`, absent by default | `uci_metropt3` |
+
+The first row is synthetic and is the default. The second is real data you obtain
+yourself. Neither is built into the image. See
+[Real industrial device data](#real-industrial-device-data) and
+[docs/data/metropt3.md](docs/data/metropt3.md).
 
 ## Stack
 
@@ -238,12 +267,16 @@ industrial-maintenance-agent/
 │   │   │   ├── base.py      # LLMProvider interface + error taxonomy
 │   │   │   ├── openai_compatible.py  # httpx transport, no vendor SDK
 │   │   │   └── factory.py   # Config-driven selection + configuration gate
-│   │   └── rag/
-│   │       ├── models.py        # RAGSearchHit / RAGSearchResponse
-│   │       ├── base.py          # RAGProvider interface + RAGProviderError
-│   │       ├── local_provider.py # In-process retrieval (LLM-free)
-│   │       ├── http_provider.py  # POST /ask client
-│   │       └── factory.py        # Config-driven provider selection
+│   │   ├── rag/
+│   │   │   ├── models.py        # RAGSearchHit / RAGSearchResponse
+│   │   │   ├── base.py          # RAGProvider interface + RAGProviderError
+│   │   │   ├── local_provider.py # In-process retrieval (LLM-free)
+│   │   │   ├── http_provider.py  # POST /ask client
+│   │   │   └── factory.py        # Config-driven provider selection
+│   │   └── device_data/     # External device sources (V0.8.5)
+│   │       ├── base.py          # DeviceDataAdapter + immutable snapshot
+│   │       ├── metropt3.py      # MetroPT-3 reader: tail read + stamped cache
+│   │       └── factory.py       # Config-driven source selection
 │   ├── schemas/
 │   │   ├── maintenance.py   # Pydantic request / response models
 │   │   └── evidence.py      # Evidence model (tool + document sources)
@@ -261,7 +294,7 @@ industrial-maintenance-agent/
 │       ├── names.py         # Canonical tool names (ToolName enum)
 │       ├── registry.py      # Tool registry, carries each tool's input model
 │       ├── arguments.py     # Strict argument validation, shared by both layers
-│       ├── device_tool.py   # get_device_status (Device ORM backed)
+│       ├── device_tool.py   # get_device_status (SQLite rows, or an external source)
 │       ├── alarm_tool.py    # query_alarm_code (data/alarms.json backed)
 │       └── maintenance_manual_tool.py  # search_maintenance_manual (RAG backed)
 ├── evaluation/                  # The Agent evaluation framework, the only one
@@ -289,21 +322,34 @@ industrial-maintenance-agent/
 │   ├── test_planner_modes.py    # rule / llm / auto, executor, API surface
 │   ├── test_evaluation.py       # Dataset, metrics, OOD safety, CLI, LLM gate
 │   ├── test_planner_comparison.py  # rule vs LLM delta, refusals, hash lock
-│   └── test_docker_config.py    # Docker build shapes: standalone vs RAG guard
+│   ├── test_docker_config.py    # Docker build shapes: standalone vs RAG guard
+│   ├── test_device_data.py      # External device source: parsing, dispatch, SQLite regression
+│   └── fixtures/
+│       ├── metropt3_sample.csv  # SYNTHETIC adapter fixture, not real measurements
+│       └── README.md            # States that the fixture is synthetic
 ├── data/
 │   ├── devices.json         # Device seed data
 │   ├── alarms.json          # Alarm code catalog
+│   ├── external/            # Externally sourced datasets, gitignored (V0.8.5)
+│   │   └── metropt3/        # Your own MetroPT-3 download; empty in the repository
 │   └── (industrial_maintenance.db generated locally, gitignored)
 ├── scripts/
 │   ├── rag_build_knowledge_base.py  # Build the RAG light index from a corpus
 │   ├── rag_retrieval_probe.py       # Run retrieval-only queries, no LLM
-│   └── llm_planner_probe.py         # Real LLM planner smoke gate, no fabrication
+│   ├── llm_planner_probe.py         # Real LLM planner smoke gate, no fabrication
+│   ├── prepare_metropt3.py          # Validate a local MetroPT-3 CSV; never downloads
+│   ├── real_data_gate.py            # Gate: the service answers from the real CSV
+│   └── real_data_agent_gate.py      # Gate: POST /agent/invoke for METRO-APU-001
 ├── docs/
 │   ├── architecture.md      # Component map, request lifecycle, planner path
+│   ├── data/
+│   │   └── metropt3.md      # Source, licence, field mapping, measured facts
+│   ├── evaluation/
+│   │   └── real_data_integration.md  # What the real-data integration does not prove
 │   └── releases/            # Published release notes
-│       ├── v0.8.2.md
 │       ├── v0.8.3.md
-│       └── v0.8.4.md
+│       ├── v0.8.4.md
+│       └── v0.8.5.md
 ├── .github/
 │   └── workflows/ci.yml     # Hermetic CI: pytest + ruff + mypy, no secrets
 ├── LICENSE                  # MIT
@@ -313,7 +359,7 @@ industrial-maintenance-agent/
 ├── pyproject.toml           # Project metadata + tool config
 ├── Dockerfile               # Unprivileged image; INSTALL_RAG_DEPS selects a shape
 ├── .dockerignore            # Keeps .env, caches and working state out of the context
-├── docker-compose.yml       # agent plus agent-rag behind the "rag" profile
+├── docker-compose.yml       # agent, plus agent-rag and agent-real-data behind profiles
 ├── .env.example             # Environment template, placeholders only
 └── README.md
 ```
@@ -404,6 +450,18 @@ Nothing about the host, port, timeout, knowledge base id or repository path is
 hardcoded. A misconfigured provider raises at construction time, and the tool
 surfaces it through `error` rather than returning an empty result.
 
+### Real device data
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `METROPT3_CSV_PATH` | empty | Path to an extracted `MetroPT3(AirCompressor).csv`. Empty means the source is absent, which is the default |
+
+The default is empty on purpose. With no path configured the MetroPT-3 source is
+not built at all, so it can neither answer nor fail, and the seeded demo devices
+behave exactly as before. Setting the variable adds one device,
+`METRO-APU-001`. No path is hardcoded, and the service never downloads the
+dataset: it reads the file you point it at, and nothing else.
+
 ## Running the service
 
 ```bash
@@ -430,7 +488,10 @@ The image runs the deterministic planner by default, so it needs no credential.
 It runs as an unprivileged user and writes SQLite to a named volume.
 
 There are two build shapes from this one Dockerfile, selected by the
-`INSTALL_RAG_DEPS` build argument and exposed as two Compose services.
+`INSTALL_RAG_DEPS` build argument, exposed as three Compose services: a plain
+`up` starts one of them, and the other two sit behind the `rag` and `real-data`
+profiles so that neither an LLM checkout nor a dataset is required to start the
+default service.
 
 #### A. Standalone
 
@@ -439,8 +500,8 @@ the alarm tool, the rule planner and the FastAPI service. It needs no LLM key
 and no Industrial Knowledge RAG checkout.
 
 ```bash
-docker build -t industrial-maintenance-agent:0.8.4 .
-docker run --rm -p 8000:8000 industrial-maintenance-agent:0.8.4
+docker build -t industrial-maintenance-agent:0.8.5 .
+docker run --rm -p 8000:8000 industrial-maintenance-agent:0.8.5
 ```
 
 With Compose:
@@ -507,6 +568,50 @@ image is missing the optional dependency set or the mount is wrong.
 The mount line uses `${RAG_HOST_REPO:-../industrial-knowledge-rag}:/rag:ro`. The
 default is a placeholder pointing at a sibling directory, not a real location,
 and the `:ro` suffix is what keeps the checkout read-only inside the container.
+
+#### C. Real industrial device data
+
+`agent-real-data` serves the real MetroPT-3 sensor dataset under the device
+identifier `METRO-APU-001`, alongside the seeded demo devices. It is the same
+image as shape A: the dataset arrives through a read-only bind mount, so there is
+no second build and no dependency to add.
+
+```bash
+# 1. Download the dataset from UCI and extract it. This repository never
+#    downloads it for you and never redistributes it. See docs/data/metropt3.md.
+python -m scripts.prepare_metropt3 --download-info
+
+# 2. Put MetroPT3(AirCompressor).csv in ./data/external/metropt3/, or point
+#    METROPT3_HOST_DIR at wherever you unpacked it. The default is that
+#    in-repository directory, and it is git-ignored.
+export METROPT3_HOST_DIR=/absolute/path/to/the/unpacked/directory
+
+# 3. Start the service.
+docker compose --profile real-data up -d --build agent-real-data
+
+# 4. Ask about the real device.
+curl -s -X POST http://127.0.0.1:8002/agent/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"query": "METRO-APU-001 当前设备状态怎么样？"}'
+```
+
+A working run reports `get_device_status` in `tools_called`, evidence attributed
+to `uci_metropt3` rather than `sqlite:devices`, and an answer carrying measured
+readings and the upstream timestamp. The gate that checks exactly this is
+`python -m scripts.real_data_gate` and `python -m scripts.real_data_agent_gate`.
+
+The dataset is **not** in the image. `data/external` is excluded in
+`.dockerignore` and the Dockerfile copies only `data/devices.json` and
+`data/alarms.json` by name, so a 208 MiB CSV cannot slip in through a
+directory-wide copy. That failure mode is worth naming: it once took this image
+from 383 MB to 1.37 GB, because the file was copied in and then duplicated by the
+ownership change that follows. `tests/test_docker_config.py` now pins both halves
+of the fix.
+
+Without the profile, `METRO-APU-001` is simply unknown to the service, which
+reports `found=false` with no error. That is the correct behaviour for a
+deployment that does not carry the dataset, and it is distinct from a source that
+is configured but unreadable.
 
 ### Database
 
@@ -842,7 +947,7 @@ registry cannot drift apart.
 
 | Tool | Input | Output | Source |
 | ---- | ----- | ------ | ------ |
-| `get_device_status` | `DeviceStatusInput(device_id)` | `DeviceStatusOutput` | `Device` ORM table (SQLite) |
+| `get_device_status` | `DeviceStatusInput(device_id)` | `DeviceStatusOutput` | `Device` ORM table (SQLite), or a configured external source |
 | `query_alarm_code` | `AlarmQueryInput(alarm_code)` | `AlarmQueryOutput` | `data/alarms.json` |
 | `search_maintenance_manual` | `ManualSearchInput(query, top_k)` | `ManualSearchOutput` | Industrial Knowledge RAG |
 
@@ -859,6 +964,62 @@ return the output model with `found=False`, which keeps dispatch logic in the
 graph free of exception handling. Alarm codes are matched
 case-insensitively. `register_default_tools()` is idempotent, so the registry can
 be rebuilt in tests without duplicate registration errors.
+
+### Real industrial device data
+
+The demo `Device` rows are seeded fixtures: deterministic, round numbers, chosen
+so the pipeline can be demonstrated and tested. They are not measurements from
+any machine. To exercise the pipeline against data an actual asset produced,
+`get_device_status` can also answer from an external source, selected by
+identifier through `app/integrations/device_data/`.
+
+| | Seeded demo devices | MetroPT-3 source |
+| --- | --- | --- |
+| Identifiers | `PLC-001`, `PLC-002`, `Robot-001`, `Robot-002`, `CNC-001` | `METRO-APU-001` |
+| Origin | Written for this repository | UCI Machine Learning Repository, dataset 791, DOI `10.24432/C5VW3R`, CC BY 4.0 |
+| Nature | Synthetic, stable | Real readings logged at 1 Hz from a metro train air production unit, February to September 2020 |
+| Storage | SQLite, seeded from `data/devices.json` | A CSV you download yourself, read from `METROPT3_CSV_PATH` |
+| Evidence source | `sqlite:devices` | `uci_metropt3` |
+| Redistributed here | Yes | **No** |
+| Requires configuration | No | Yes |
+
+Three things about this integration are deliberate.
+
+**The tool contract did not change.** The identifier space grew by one; the
+schema, the registered tool name and the planner did not move. A deployment that
+configures no external source is byte-for-byte the same behaviour as before, and
+`tests/test_device_data.py` asserts that `DeviceStatusInput` still exposes exactly
+`device_id` and that the registry still holds exactly three tools.
+
+**Status is derived, and says so.** The dataset publishes sensor readings and no
+ground-truth equipment state. So the tool does not invent one: it reports an
+operational state derived from two documented control contacts, `DV_eletric`
+(active while the compressor runs under load) and `COMP` (active while there is
+no air intake), cross-checked against the published motor-current bands. The rule
+yields `running_under_load`, `running_offloaded`, `stopped`, or `observed` when
+the contacts match nothing documented. The label always travels with a
+`status_derivation` field, and the answer renders it beside the status, so a
+derived label can never be read as ground truth. No fault, degradation or
+remaining-useful-life claim is made anywhere.
+
+**Foreign readings are not reshaped into a demo record.** `DeviceStatusOutput`
+has `temperature`, `pressure`, `rpm` and `alarm_code` because the demo rows have
+them. MetroPT-3 measurements are not folded into those fields; they travel in
+`measurements` and `digital_signals` under the dataset's own column names,
+including its `DV_eletric` spelling. Fields the dataset does not carry stay
+`None` rather than being filled with a plausible value.
+
+Reading is bounded. The CSV is about 208 MiB across 1.5 million rows, so a status
+query never parses the file: the adapter reads the header, seeks to the end and
+reads a bounded tail window to find the last complete record, and caches the
+result against the file's `(size, mtime_ns)` stamp. Warm queries return in well
+under a millisecond of adapter time, and replacing the file invalidates the cache
+by itself.
+
+See `docs/data/metropt3.md` for the source, the licence, the field mapping and
+the measured facts of the copy used here, and
+`docs/evaluation/real_data_integration.md` for what this does and does not
+establish about agent quality.
 
 
 ## RAG integration
@@ -1727,6 +1888,43 @@ sign is unambiguous on the `lower_is_better` metrics, that a mismatched dataset 
 refused with both hashes named, and that a missing LLM baseline produces a refusal
 instead of a file of nulls. No evaluation test contacts a provider, so the whole
 suite stays hermetic and runs without a credential.
+
+`tests/test_device_data.py` covers the external device source. It runs against a
+five-record synthetic fixture, never against the real 208 MiB CSV, so the suite
+stays hermetic and fast. The fixture is engineered to reach every branch of the
+derived-status rule, and `tests/fixtures/README.md` states that it is not a
+sample of the real dataset. The file loads, the columns convert, a header-only
+file and a truncated record are both reported as their own errors, the last
+record is selected from a file larger than one read window, and the demo devices
+still answer from SQLite. The real CSV is exercised by the gates below instead,
+which is the only place a genuine measurement should be required.
+
+### Real-data gates
+
+Three checks cover the real dataset, and only the third needs Docker.
+
+```bash
+# 1. The service answers correctly from the real CSV, with latency, and proves
+#    which revision of the file it read.
+python -m scripts.real_data_gate \
+  --csv "data/external/metropt3/MetroPT3(AirCompressor).csv" \
+  --expect-rows 1516948 \
+  --expect-sha256 db30ccb4ea402e3c8bf2c99db06e288d4f2a772f6928f9dbe26a920d69793e24
+
+# 2. The running agent reaches the same answer over HTTP. Start the service with
+#    METROPT3_CSV_PATH set, then point the gate at it.
+python -m scripts.real_data_agent_gate --base-url http://127.0.0.1:8000
+
+# 3. The same check against the container. The dataset reaches it through the
+#    read-only mount, not through the image.
+docker compose --profile real-data up -d --build agent-real-data
+python -m scripts.real_data_agent_gate --base-url http://127.0.0.1:8002
+```
+
+Each prints a JSON report and a verdict line to grep for. The expected row count
+and digest above are the measured facts of the copy used here, recorded in
+`docs/data/metropt3.md`; passing both flags is what turns "the file is present"
+into "the file is the revision this release was validated against".
 
 ### Manual check
 

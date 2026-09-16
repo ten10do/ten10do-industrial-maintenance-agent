@@ -1,18 +1,27 @@
 # Compose file for the Industrial Maintenance Agent.
 #
-# Two services, and only one of them is started by a plain "up":
+# Three services, and only one of them is started by a plain "up":
 #
-#   agent      the default standalone agent. Deterministic rule planner, no
-#              credential, no RAG checkout.
-#   agent-rag  the optional RAG-enabled agent. Behind the "rag" profile, so it
-#              is built and started only when that profile is named.
+#   agent           the default standalone agent. Deterministic rule planner, no
+#                   credential, no RAG checkout, no dataset.
+#   agent-rag       the optional RAG-enabled agent. Behind the "rag" profile, so
+#                   it is built and started only when that profile is named.
+#   agent-real-data the standalone agent with the real MetroPT-3 sensor dataset
+#                   mounted read-only. Behind the "real-data" profile. It uses
+#                   the same image as "agent": the data arrives through the
+#                   mount, so no second build shape is needed.
 #
-#   docker compose up -d                  -> agent
-#   docker compose --profile rag up -d agent-rag   -> agent-rag
+#   docker compose up -d                            -> agent
+#   docker compose --profile rag up -d agent-rag    -> agent-rag
+#   docker compose --profile real-data up -d agent-real-data
 #
 # The RAG service needs the optional local dependency set baked into its image,
 # which is what the INSTALL_RAG_DEPS build argument below selects. Mounting the
 # RAG checkout alone is not sufficient.
+#
+# The real-data service needs no extra dependency: the dataset reader is part of
+# the core application. It needs the dataset file, which this repository does not
+# redistribute. See docs/data/metropt3.md.
 
 services:
   agent:
@@ -22,7 +31,7 @@ services:
       args:
         # Default shape: core dependencies only.
         INSTALL_RAG_DEPS: "0"
-    image: industrial-maintenance-agent:0.8.4
+    image: industrial-maintenance-agent:0.8.5
     container_name: industrial-maintenance-agent
     ports:
       - "8000:8000"
@@ -72,7 +81,7 @@ services:
       args:
         # RAG shape: adds requirements-rag-local.txt on top of the core set.
         INSTALL_RAG_DEPS: "1"
-    image: industrial-maintenance-agent:0.8.4-rag
+    image: industrial-maintenance-agent:0.8.5-rag
     container_name: industrial-maintenance-agent-rag
     ports:
       # Separate host port so both services can run side by side.
@@ -117,6 +126,59 @@ services:
 
     restart: unless-stopped
 
+  agent-real-data:
+    profiles: ["real-data"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Same standalone shape as the "agent" service. The real dataset is
+        # mounted, not baked in, so the image is identical.
+        INSTALL_RAG_DEPS: "0"
+    image: industrial-maintenance-agent:0.8.5
+    container_name: industrial-maintenance-agent-real-data
+    ports:
+      # Separate host port so the services can run side by side.
+      - "${REAL_DATA_HOST_PORT:-8002}:8000"
+    environment:
+      PLANNER_MODE: rule
+      LOG_LEVEL: INFO
+
+      DATABASE_URL: sqlite:///./data/industrial_maintenance.db
+      AUTO_CREATE_TABLES: "true"
+
+      # --- Real device data ---
+      # Path inside the container. It resolves through the read-only mount
+      # declared below, so the dataset never enters the image and is never
+      # downloaded by the service.
+      METROPT3_CSV_PATH: /external-data/${METROPT3_FILE:-MetroPT3(AirCompressor).csv}
+
+    volumes:
+      # Separate database volume so this service never shares a database file
+      # with another service that may be running at the same time.
+      - agent-real-data-data:/app/data
+      # Read-only bind mount of a directory holding the extracted MetroPT-3 CSV.
+      # Set METROPT3_HOST_DIR to wherever you unpacked it; the default points at
+      # the in-repository directory that .gitignore keeps the dataset out of.
+      # This repository does not redistribute the dataset. See docs/data/metropt3.md.
+      - ${METROPT3_HOST_DIR:-./data/external/metropt3}:/external-data:ro
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/health', timeout=3).read()",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+    restart: unless-stopped
+
 volumes:
   agent-data:
   agent-rag-data:
+  agent-real-data-data:

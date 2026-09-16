@@ -267,8 +267,15 @@ def _device_label(payload: dict[str, Any]) -> str:
 
 
 def _device_facts(payload: dict[str, Any]) -> list[str]:
-    """Return the fact strings the device tool actually returned."""
+    """Return the fact strings the device tool actually returned.
+
+    Only fields the payload actually carries become facts. An external source
+    contributes its own readings under their own names, so nothing is projected
+    onto a PLC-shaped field it does not belong in.
+    """
     facts: list[str] = []
+    if payload.get("data_source"):
+        facts.append(f"数据来源 {payload['data_source']}")
     if payload.get("status"):
         facts.append(f"状态 {payload['status']}")
     if payload.get("temperature") is not None:
@@ -279,12 +286,21 @@ def _device_facts(payload: dict[str, Any]) -> list[str]:
         facts.append(f"转速 {payload['rpm']}")
     if payload.get("alarm_code"):
         facts.append(f"报警码 {payload['alarm_code']}")
+    measurements = payload.get("measurements") or {}
+    if measurements:
+        facts.append(
+            "实测读数 " + "，".join(f"{key}={value}" for key, value in measurements.items())
+        )
+    if payload.get("source_timestamp"):
+        facts.append(f"数据时间戳 {payload['source_timestamp']}")
     return facts
 
 
 def _device_evidence(payload: dict[str, Any]) -> Evidence:
     device_id = str(payload.get("device_id", ""))
-    if not payload.get("found"):
+    if payload.get("error"):
+        content = f"设备 {device_id} 状态不可用：{payload['error']}"
+    elif not payload.get("found"):
         content = f"设备 {device_id} 未找到：数据库中没有该设备记录。"
     else:
         facts = _device_facts(payload)
@@ -293,7 +309,10 @@ def _device_evidence(payload: dict[str, Any]) -> Evidence:
 
     return Evidence(
         source_type=SourceType.TOOL,
-        source=DEVICE_TOOL_SOURCE,
+        # A fact is attributed to the source that produced it. External sources
+        # name themselves, so evidence never claims to come from the seeded
+        # database when it did not.
+        source=str(payload.get("data_source") or DEVICE_TOOL_SOURCE),
         tool_name=ToolName.GET_DEVICE_STATUS.value,
         content=content,
     )
@@ -386,6 +405,8 @@ def _device_section(payload: dict[str, Any] | None) -> str:
         return "【设备状态】\n本次未查询设备状态。"
 
     device_id = str(payload.get("device_id", ""))
+    if payload.get("error"):
+        return f"【设备状态】\n设备 {device_id} 状态不可用：{payload['error']}"
     if not payload.get("found"):
         return f"【设备状态】\n设备 {device_id} 未找到：数据库中没有该设备记录。"
 
@@ -394,7 +415,13 @@ def _device_section(payload: dict[str, Any] | None) -> str:
         lines.append(f"设备类型：{payload['device_type']}")
     if payload.get("location"):
         lines.append(f"安装位置：{payload['location']}")
-    lines.append(f"当前状态：{payload.get('status') or '未提供'}")
+
+    status_line = f"当前状态：{payload.get('status') or '未提供'}"
+    # A derived label carries its basis with it, so a reader can never mistake it
+    # for a state the source published.
+    if payload.get("status_derivation"):
+        status_line += f"（{payload['status_derivation']}）"
+    lines.append(status_line)
 
     metrics: list[str] = []
     if payload.get("temperature") is not None:
@@ -403,7 +430,26 @@ def _device_section(payload: dict[str, Any] | None) -> str:
         metrics.append(f"压力 {payload['pressure']}")
     if payload.get("rpm") is not None:
         metrics.append(f"转速 {payload['rpm']}")
-    lines.append("关键状态：" + ("，".join(metrics) if metrics else "无可用测量值"))
+
+    measurements = payload.get("measurements") or {}
+    if metrics:
+        lines.append("关键状态：" + "，".join(metrics))
+    elif not measurements:
+        lines.append("关键状态：无可用测量值")
+
+    if payload.get("data_source"):
+        lines.append(f"数据来源：{payload['data_source']}")
+    if payload.get("source_timestamp"):
+        lines.append(f"数据时间戳：{payload['source_timestamp']}")
+
+    if measurements:
+        lines.append("实测读数：")
+        lines.extend(f"- {key} = {value}" for key, value in measurements.items())
+
+    signals = payload.get("digital_signals") or {}
+    if signals:
+        lines.append("数字信号：")
+        lines.extend(f"- {key} = {value}" for key, value in signals.items())
 
     lines.append(f"报警码：{payload.get('alarm_code') or '无'}")
     if payload.get("last_maintenance_time"):

@@ -24,7 +24,7 @@ class Settings(BaseSettings):
 
     # Application
     app_name: str = "Industrial Maintenance Agent"
-    app_version: str = "0.8.4"
+    app_version: str = "0.8.5"
     environment: str = "development"
     debug: bool = False
     # Verbosity for the ``app`` logger namespace. A mistyped value fails loudly
@@ -74,6 +74,14 @@ class Settings(BaseSettings):
     # POST /ask always runs the RAG service's own answer generator, which needs
     # a provider key on the RAG side. The agent discards the generated answer.
     rag_http_model_provider: str = "DeepSeek"
+
+    # External device data sources (optional, read-only)
+    # A local copy of the UCI MetroPT-3 CSV, served under the METRO-APU-001
+    # identifier. Empty by default, which leaves the external source absent and
+    # the seeded SQLite devices answering exactly as before. The dataset is about
+    # 208 MiB, is never bundled with this repository, and is never downloaded by
+    # the running service: only the path is read. See docs/data/metropt3.md.
+    metropt3_csv_path: str = ""
 
 
 @lru_cache

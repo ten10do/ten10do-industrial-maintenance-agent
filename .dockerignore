@@ -33,6 +33,15 @@ htmlcov
 *.log
 data/*.db
 
+# Externally sourced datasets. These are large, licensed to their publisher
+# rather than to this project, and mounted read-only at run time instead of being
+# shipped. A 208 MiB copy inside the build context would be baked into the image
+# by any directory-wide COPY and would slow every build. The runtime data files
+# (devices.json, alarms.json) are copied by name, so this exclusion cannot remove
+# anything the service needs.
+data/external
+**/*.zip
+
 # Assistant workspace state
 .workbuddy
 

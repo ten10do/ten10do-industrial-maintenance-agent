@@ -21,6 +21,14 @@ data/*.sqlite
 *.db
 *.sqlite
 
+# External datasets. The MetroPT-3 CSV is about 208 MiB and is not ours to
+# redistribute; it must never enter Git history. The directory itself is kept
+# (it holds the README and .gitkeep) but every payload is ignored. See
+# docs/data/metropt3.md.
+data/external/metropt3/*.csv
+data/external/metropt3/*.zip
+data/external/metropt3/*.pdf
+
 # Logs
 *.log
 
