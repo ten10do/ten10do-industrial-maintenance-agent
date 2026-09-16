@@ -393,8 +393,8 @@ The image runs the deterministic planner by default, so it needs no credential.
 It runs as an unprivileged user and writes SQLite to a named volume.
 
 ```bash
-docker build -t industrial-maintenance-agent:0.8.0 .
-docker run --rm -p 8000:8000 industrial-maintenance-agent:0.8.0
+docker build -t industrial-maintenance-agent:0.8.1 .
+docker run --rm -p 8000:8000 industrial-maintenance-agent:0.8.1
 ```
 
 With Compose:
@@ -849,7 +849,7 @@ entry point. Nothing is reimplemented here.
 # 1. Build the light index from a corpus directory of real PDFs.
 python scripts/rag_build_knowledge_base.py \
   --rag-repo-root /path/to/industrial-knowledge-rag \
-  --corpus-dir /path/to/industrial-knowledge-rag/backend/evaluation/benchmark_private/documents
+  --corpus-dir /path/to/industrial-knowledge-rag/backend/evaluation/benchmark_corpus/documents
 
 # 2. Run retrieval-only queries against the built index.
 python scripts/rag_retrieval_probe.py \
@@ -1563,6 +1563,23 @@ only when a run refuses because the provider is missing. Every baseline records 
 dataset path and SHA-256, the planner mode, the run mode, the git commit, the registry
 contents and the application version, so a number can always be traced back to the
 input that produced it.
+
+Two of those fields deserve a note.
+
+`dataset_path` is stored relative to the repository root when the dataset lives inside
+the repository, and resolved when it does not, so a published report carries no author
+filesystem layout. The path is a label only. The `dataset_sha256` beside it is what
+pins the exact input.
+
+`git_worktree_dirty` is computed from `git status --porcelain`, which reports untracked
+working files alongside modified tracked files. Every published baseline carries
+`true`. At the time of those runs the working tree held untracked runtime and report
+files, including the local `.env` and the reports being generated, and no tracked
+source file was modified. The historical reports are deliberately not backfilled,
+because editing a record to make it look cleaner would destroy the audit trail. A
+future schema revision could split the flag into `git_tracked_dirty` and
+`git_untracked_present` so the two situations become distinguishable. This release
+does not change the benchmark schema.
 
 ### Known limits
 

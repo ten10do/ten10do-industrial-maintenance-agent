@@ -32,7 +32,10 @@ import os
 import sys
 from pathlib import Path
 
-DEFAULT_CORPUS_SUBPATH = Path("backend/evaluation/benchmark_private/documents")
+#: Conventional location of the corpus inside a RAG checkout. It is a default
+#: only: a checkout that keeps its corpus elsewhere must pass ``--corpus-dir``
+#: explicitly, and no path outside this repository is assumed to exist.
+DEFAULT_CORPUS_SUBPATH = Path("backend/evaluation/benchmark_corpus/documents")
 DEFAULT_KB_ID = "default"
 DEFAULT_MAX_CHUNKS = 20000
 

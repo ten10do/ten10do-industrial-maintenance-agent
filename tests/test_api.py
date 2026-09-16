@@ -70,8 +70,9 @@ REQUIRED_RESPONSE_FIELDS = {
     "latency_ms",
 }
 
-#: A value shaped like a credential. It must never appear in a body or a log.
-FAKE_SECRET = "sk-live-DO-NOT-LEAK-9f3a2b"
+#: A test-only sentinel. It must never appear in a body or a log. The value is
+#: deliberately not shaped like any real provider credential.
+FAKE_SECRET = "TEST_SECRET_DO_NOT_LEAK_HTTP_ERROR_TOKEN_5b8e13fa92c4"
 
 client = TestClient(app)
 
@@ -178,7 +179,7 @@ def test_root_endpoint_reports_the_current_version() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "ok"
-    assert payload["version"] == "0.8.0"
+    assert payload["version"] == "0.8.1"
 
 
 def test_http_surface_exposes_only_the_documented_routes() -> None:

@@ -133,7 +133,7 @@ def make_report(
             planner_mode=planner_mode,
             run_mode="planner_only",
             execute_tools=False,
-            app_version="0.8.0",
+            app_version="0.8.1",
             python_version="3.11.9",
             git_commit="a" * 40,
             git_worktree_dirty=False,

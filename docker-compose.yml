@@ -9,7 +9,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: industrial-maintenance-agent:0.8.0
+    image: industrial-maintenance-agent:0.8.1
     container_name: industrial-maintenance-agent
     ports:
       - "8000:8000"

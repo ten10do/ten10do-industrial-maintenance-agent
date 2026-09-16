@@ -4,7 +4,7 @@ Every planner test runs without a network. The provider is a plain object that
 returns queued text or raises a queued error, and it records the requests it
 received so a test can assert what the planner actually sent.
 
-The double also carries a credential-shaped constant. Tests assert it never
+The double also carries a test-only sentinel constant. Tests assert it never
 reaches a response body, the agent state or a log line, which is the property the
 real provider must preserve.
 """
@@ -24,8 +24,10 @@ from app.integrations.llm import (
     LLMTimeoutError,
 )
 
-#: A key-shaped value. It must never reach a log, a state or a response body.
-FAKE_API_KEY = "sk-test-DO-NOT-LEAK-0123456789abcdef"
+#: A sentinel that must never reach a log, a state or a response body. The value
+#: is deliberately not shaped like any real provider credential, so a leak of it
+#: cannot be mistaken for a live key and no secret scanner has to triage it.
+FAKE_API_KEY = "TEST_SECRET_DO_NOT_LEAK_LLM_PROVIDER_KEY_7f3a91c42d68"
 
 #: Base URL used by planner tests. The host is not expected to resolve.
 FAKE_BASE_URL = "https://llm.invalid/v1"
@@ -104,7 +106,7 @@ def provider_failed(detail: str = "HTTP 502") -> LLMProviderError:
 
 
 def fake_secret() -> SecretStr:
-    """Return the credential-shaped value wrapped for the settings model."""
+    """Return the test-only sentinel wrapped for the settings model."""
     return SecretStr(FAKE_API_KEY)
 
 
