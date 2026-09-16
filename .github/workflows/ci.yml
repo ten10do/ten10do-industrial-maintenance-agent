@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# The workflow only ever reads the repository. No repository secret is
+# referenced anywhere in this file.
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality gates (Python 3.11)
+    runs-on: ubuntu-latest
+
+    env:
+      # Keep the run hermetic. The deterministic rule planner is the default and
+      # needs no credential, so no provider URL, key or external checkout is
+      # configured here. The LLM planner and the local RAG provider are both
+      # exercised by tests through in-process doubles, never over the network.
+      PLANNER_MODE: rule
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements-dev.txt
+
+      - name: Run test suite
+        run: pytest -q
+
+      - name: Lint (ruff check)
+        run: ruff check app tests evaluation scripts
+
+      - name: Format check (ruff format --check)
+        run: ruff format --check app tests evaluation scripts
+
+      - name: Type check (mypy)
+        run: mypy app tests evaluation

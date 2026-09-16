@@ -1,5 +1,10 @@
 # Industrial Maintenance Agent
 
+[![CI](https://github.com/ten10do/ten10do-industrial-maintenance-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/ten10do/ten10do-industrial-maintenance-agent/actions/workflows/ci.yml)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/ten10do/ten10do-industrial-maintenance-agent/blob/main/LICENSE)
+[![Release](https://img.shields.io/github/v/release/ten10do/ten10do-industrial-maintenance-agent?display_name=tag&sort=semver)](https://github.com/ten10do/ten10do-industrial-maintenance-agent/releases)
+
 ## Overview
 
 An HTTP service for industrial equipment maintenance assistance. It answers
@@ -109,6 +114,17 @@ usage, and a measured before-and-after fix to the end-to-end retrieval path.
 V0.8 is the public release candidate: repository audit, container packaging, a
 documented architecture, and version alignment across the tree. No planner
 behaviour and no benchmark number changed in this version.
+
+V0.8.1 hardened the public repository metadata ahead of the formal release:
+credential-shaped test sentinels were replaced with obviously synthetic values,
+the RAG corpus directory name in the documented examples was corrected, and the
+historical `git_worktree_dirty` flag was documented rather than backfilled. No
+planner behaviour and no benchmark number changed.
+
+V0.8.2 is the formal public release: an MIT license, a hermetic GitHub Actions
+workflow that mirrors the local quality gates, repository description and
+topics, and published release notes. No planner behaviour and no benchmark
+number changed in this version.
 
 ## Stack
 
@@ -269,7 +285,12 @@ industrial-maintenance-agent/
 │   ├── rag_retrieval_probe.py       # Run retrieval-only queries, no LLM
 │   └── llm_planner_probe.py         # Real LLM planner smoke gate, no fabrication
 ├── docs/
-│   └── architecture.md      # Component map, request lifecycle, planner path
+│   ├── architecture.md      # Component map, request lifecycle, planner path
+│   └── releases/            # Published release notes
+│       └── v0.8.2.md
+├── .github/
+│   └── workflows/ci.yml     # Hermetic CI: pytest + ruff + mypy, no secrets
+├── LICENSE                  # MIT
 ├── requirements.txt             # Runtime dependencies
 ├── requirements-dev.txt         # Dev / test dependencies
 ├── requirements-rag-local.txt   # Optional deps for RAG_PROVIDER=local
@@ -393,8 +414,8 @@ The image runs the deterministic planner by default, so it needs no credential.
 It runs as an unprivileged user and writes SQLite to a named volume.
 
 ```bash
-docker build -t industrial-maintenance-agent:0.8.1 .
-docker run --rm -p 8000:8000 industrial-maintenance-agent:0.8.1
+docker build -t industrial-maintenance-agent:0.8.2 .
+docker run --rm -p 8000:8000 industrial-maintenance-agent:0.8.2
 ```
 
 With Compose:
@@ -1670,3 +1691,9 @@ curl -s -X POST http://127.0.0.1:8123/agent/invoke \
 5. Add multi-turn planning: carry prior tool results into the planner prompt so a
    follow-up can build on what the previous turn retrieved.
 6. Add authentication to `/agent/invoke` before it is exposed beyond localhost.
+
+## License
+
+License: MIT. See [LICENSE](LICENSE) for the full text.
+
+Copyright (c) 2026 ten10do
