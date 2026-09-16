@@ -414,8 +414,8 @@ The image runs the deterministic planner by default, so it needs no credential.
 It runs as an unprivileged user and writes SQLite to a named volume.
 
 ```bash
-docker build -t industrial-maintenance-agent:0.8.2 .
-docker run --rm -p 8000:8000 industrial-maintenance-agent:0.8.2
+docker build -t industrial-maintenance-agent:0.8.3 .
+docker run --rm -p 8000:8000 industrial-maintenance-agent:0.8.3
 ```
 
 With Compose:
