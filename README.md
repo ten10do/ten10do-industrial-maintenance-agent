@@ -5,6 +5,97 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/ten10do/ten10do-industrial-maintenance-agent/blob/main/LICENSE)
 [![Release](https://img.shields.io/github/v/release/ten10do/ten10do-industrial-maintenance-agent?display_name=tag&sort=semver)](https://github.com/ten10do/ten10do-industrial-maintenance-agent/releases)
 
+An evidence-grounded industrial maintenance agent: real sensor data, validated tool calling, industrial RAG retrieval and production observability behind one HTTP service.
+
+<img src="docs/assets/demo/hero.svg" alt="Request flow: UCI MetroPT-3 real sensor data and seeded device rows feed device adapters, a LangGraph workflow plans with the rule planner or an optional LLM planner, three registry tools run, the answer is rendered from tool evidence, FastAPI serves it, and an observability layer records logs, Prometheus metrics and optional traces." width="1000">
+
+## Demo
+
+### Real industrial sensor data
+
+<img src="docs/assets/demo/real-data.png" alt="A POST to /agent/invoke for METRO-APU-001 returning oil temperature, motor current and five pressure readings, the published source timestamp 2020-09-01T03:59:50, data_source uci_metropt3, and a status label that states how it was derived." width="800">
+
+MetroPT-3 is a real 1 Hz record from a metro train air production unit, and
+`METRO-APU-001` is served from that file through a device data adapter by the
+existing `get_device_status` tool. The readings are the dataset's; the status
+label is derived and says so in the response.
+
+### Evidence-grounded maintenance RAG
+
+<img src="docs/assets/demo/rag-evidence.png" alt="A POST to /agent/invoke asking how to repair a PowerFlex 520 drive motor overload, returning four retrieved passages with provider local, retrieval mode hybrid, and for each hit the document, page, section, chunk id and score." width="800">
+
+A PowerFlex 520 motor overload question is answered from Rockwell manuals
+retrieved by the local hybrid index, and each hit carries its document, page,
+section, chunk id and score so the answer can be traced to a page. The passage
+body is not reproduced; only the retrieval structure is shown.
+
+### Production observability
+
+<img src="docs/assets/demo/observability.png" alt="One request to /agent/invoke followed by GET /metrics showing industrial_agent_requests_total, request duration count and sum, tool call count and tool duration, then two JSON log records from the same process." width="800">
+
+One request produces structured events and advances 53 metric samples in the same
+process, and the request counter, the duration histogram sum and the logged
+latency all agree at 7.568 ms. The raw query never reaches the log line.
+
+The exact commands behind all three captures, and the boundary of what each one
+proves, are in [docs/demo.md](docs/demo.md).
+
+## At a glance
+
+| Capability | Implementation |
+| ---------- | -------------- |
+| Agent planning | Rule planner by default, plus a real LLM planner, both emitting the same validated `AgentPlan` |
+| Tool calling | One registry with Pydantic argument models; an unknown tool or a bad argument fails validation instead of running |
+| Real device data | UCI MetroPT-3, 1 Hz readings from a metro air production unit, CC BY 4.0, mounted read-only |
+| Industrial knowledge | Rockwell PowerFlex manuals through a local or HTTP RAG provider |
+| API | FastAPI + Uvicorn, layered so the transport never imports the workflow |
+| Evaluation | Frozen 49-case hand-authored benchmark, rule and LLM planners compared |
+| Deployment | Docker, three dependency shapes, non-root user |
+| Observability | Structured logs, eleven Prometheus metrics, optional OpenTelemetry tracing |
+| Quality | pytest, ruff, mypy, and a required GitHub Actions check on every pull request |
+
+## Headline results
+
+| Metric | Value |
+| ------ | ----- |
+| Rule planner tool recall | 98.51% |
+| LLM planner tool precision, mean of 3 runs | 94.81% |
+| Rule planner out-of-domain tool call rate | 37.50% |
+| LLM planner out-of-domain tool call rate, mean of 3 runs | 8.33% |
+| Test suite | 447 collected |
+
+Every figure is read from a recorded run under
+[`evaluation/reports/`](evaluation/reports/). The three-run figures are a mean
+over three independent runs rather than a confidence interval, and all three runs
+are published. The dataset is hand-authored, so it bounds neither planner in
+general. The real MetroPT-3 integration is covered by three integration gates
+against one record and the dataset carries no ground-truth equipment state, so it
+is deliberately not reported as a benchmark row; what those gates do and do not
+establish is in
+[docs/evaluation/real_data_integration.md](docs/evaluation/real_data_integration.md).
+The full comparison, the per-run spread and the failure list are under
+[Evaluation and benchmarks](#evaluation-and-benchmarks).
+
+## Quick try
+
+The default image needs no credential, no dataset and no RAG checkout.
+
+```bash
+docker compose up -d
+
+# Seed the demo device rows, then ask about one of them.
+docker compose exec agent python -m app.database
+curl -s http://127.0.0.1:8000/health
+curl -s -X POST http://127.0.0.1:8000/agent/invoke \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "PLC-001 现在什么状态？"}'
+```
+
+Real sensor data, the RAG profile and the observability settings each need one
+extra step: [Docker](#docker) ·
+[docs/data/metropt3.md](docs/data/metropt3.md) ·
+[docs/observability.md](docs/observability.md).
+
 ## Overview
 
 An HTTP service for industrial equipment maintenance assistance. It answers
@@ -53,120 +144,6 @@ engine.
 5. **The capability claim is measured.** The rule planner and a real external LLM
    planner are both scored against a 49-case hand-authored answer key, and every
    figure below comes from a recorded run under `evaluation/reports/`.
-
-### Headline results
-
-Rule planner, frozen, 49 cases, planner only:
-
-| Metric | Value |
-| ------ | ----- |
-| Intent accuracy | 0.9756 |
-| Tool selection exact match | 0.7959 |
-| Task success rate | 0.7959 |
-| Argument accuracy | 1.0000 |
-| Mean planning latency | 0.2103 ms |
-
-LLM planner (`openai_compatible`, `deepseek-flash`), mean of three independent
-49-case runs:
-
-| Metric | Value |
-| ------ | ----- |
-| Intent accuracy | 0.96748 |
-| Tool selection exact match | 0.80272 |
-| Task success rate | 0.78231 |
-| Tool precision | 0.94805 |
-| Tool recall | 0.90547 |
-| Unnecessary tool call rate | 0.05195 |
-| Mean planning latency | 1410.44 ms |
-| Tokens per case | 1094.40 |
-
-These are three runs, not a confidence interval, and the spread between them is
-published in full under [Evaluation and benchmarks](#evaluation-and-benchmarks).
-The dataset is a hand-authored reference, so it bounds neither planner in general.
-
-V0.8.5 also adds a real-data device integration, validated by three integration
-gates against the real MetroPT-3 file. Those gates check one record, and the
-dataset carries no ground-truth equipment state, so they are deliberately not
-reported as a row above. What they do and do not establish is in
-[docs/evaluation/real_data_integration.md](docs/evaluation/real_data_integration.md).
-
-### Release history
-
-V0.4 wired the Industrial Knowledge RAG repository in as a retrieval tool: a fully
-deterministic `route_query -> plan_actions -> execute_tools -> retrieve_context ->
-synthesize` pipeline backed by the registry, with a rule-based parser and no LLM
-at any stage.
-
-V0.4.2 exposed that pipeline over HTTP through `POST /agent/invoke`, behind an
-`app/api` transport layer and an `AgentService` that owns request correlation,
-latency measurement, state translation and logging. The workflow is unchanged.
-
-V0.5 added an optional LLM planner alongside the frozen rule planner. The planner
-decides which tools to call and with which arguments. The default configuration,
-`PLANNER_MODE=rule`, leaves the earlier behaviour untouched.
-
-V0.6 added an agent evaluation framework, kept separate from `tests/` on purpose.
-A software test asserts that the code does what the specification says. It cannot
-tell you how often the plan is the right plan. The framework measures agent
-capability against a hand-authored answer key, and the baseline is produced by
-running the real planner over the real dataset. No stub is scored, and no number
-is reported that was not measured.
-
-V0.7 extended the framework to a real LLM planner benchmark: a Rule versus LLM
-comparison that refuses to approximate, a latency distribution with a documented
-p95 convention, and a gate that stops a stub from standing in for a provider.
-V0.7.1 hardened it with a three-run stability study, provider-reported token
-usage, and a measured before-and-after fix to the end-to-end retrieval path.
-
-V0.8 is the public release candidate: repository audit, container packaging, a
-documented architecture, and version alignment across the tree. No planner
-behaviour and no benchmark number changed in this version.
-
-V0.8.1 hardened the public repository metadata ahead of the formal release:
-credential-shaped test sentinels were replaced with obviously synthetic values,
-the RAG corpus directory name in the documented examples was corrected, and the
-historical `git_worktree_dirty` flag was documented rather than backfilled. No
-planner behaviour and no benchmark number changed.
-
-V0.8.2 is the formal public release: an MIT license, a hermetic GitHub Actions
-workflow that mirrors the local quality gates, repository description and
-topics, and published release notes. No planner behaviour and no benchmark
-number changed in this version.
-
-V0.8.3 was a cross-platform patch. The RAG provider derived a document name with
-`Path(...).name`, which does not split Windows separators on POSIX, so the same
-test passed locally and failed on the Linux CI runner. Document name extraction
-is now explicit about both separators. No planner behaviour and no benchmark
-number changed.
-
-V0.8.4 makes the Docker RAG path reproducible. The published image installs the
-core requirements only, while the local RAG provider additionally needs the
-optional dependency set, so mounting a RAG checkout turned out to be necessary
-but not sufficient. A build argument now selects a RAG-enabled image, Compose
-exposes it behind a discoverable profile, and both shapes are runtime-validated.
-No planner behaviour and no benchmark number changed.
-
-V0.8.5 adds a second device data source backed by a public real-world dataset:
-the UCI MetroPT-3 air production unit, served under `METRO-APU-001` through the
-existing `get_device_status` tool with no schema change and no new tool. Status is
-derived from documented control contacts and always labelled as derived, since
-the dataset publishes no ground-truth equipment state. The dataset is never
-downloaded at run time, never enters the image, and is read through a bounded tail
-window rather than parsed whole. The rule planner needed one lexer change to
-recognise a two-segment identifier; its effect on the frozen benchmark was
-measured before and after and is zero on all nine metrics.
-
-V0.9 makes the service observable in production without changing what it decides.
-Structured logging, with `LOG_FORMAT=json` as an opt-in alongside the historical
-text line, a Prometheus endpoint at `GET /metrics`, and optional OpenTelemetry
-tracing are added as a layer that observes the pipeline from outside. Planner,
-tool, graph and integration modules import no metrics or tracing library; they
-call helpers in `app/observability/instrumentation.py`. Every label value comes
-from a frozen vocabulary, so no request id, device id or query text can become a
-time series, and tracing imports nothing and opens no socket when it is disabled.
-The frozen benchmark was rerun before and after the change: all nine functional
-metrics and every failure record are byte-identical, and the measured latency cost
-is published separately rather than asserted.
 
 ### Device data sources
 
@@ -2070,6 +2047,91 @@ curl -s -X POST http://127.0.0.1:8123/agent/invoke \
   -H "Content-Type: application/json" -d '{"query": "PLC-001 现在什么状态"}'
 ```
 
+
+## Development
+
+### Release history
+
+<details>
+<summary>Version history, V0.4 to V0.9.0</summary>
+
+V0.4 wired the Industrial Knowledge RAG repository in as a retrieval tool: a fully
+deterministic `route_query -> plan_actions -> execute_tools -> retrieve_context ->
+synthesize` pipeline backed by the registry, with a rule-based parser and no LLM
+at any stage.
+
+V0.4.2 exposed that pipeline over HTTP through `POST /agent/invoke`, behind an
+`app/api` transport layer and an `AgentService` that owns request correlation,
+latency measurement, state translation and logging. The workflow is unchanged.
+
+V0.5 added an optional LLM planner alongside the frozen rule planner. The planner
+decides which tools to call and with which arguments. The default configuration,
+`PLANNER_MODE=rule`, leaves the earlier behaviour untouched.
+
+V0.6 added an agent evaluation framework, kept separate from `tests/` on purpose.
+A software test asserts that the code does what the specification says. It cannot
+tell you how often the plan is the right plan. The framework measures agent
+capability against a hand-authored answer key, and the baseline is produced by
+running the real planner over the real dataset. No stub is scored, and no number
+is reported that was not measured.
+
+V0.7 extended the framework to a real LLM planner benchmark: a Rule versus LLM
+comparison that refuses to approximate, a latency distribution with a documented
+p95 convention, and a gate that stops a stub from standing in for a provider.
+V0.7.1 hardened it with a three-run stability study, provider-reported token
+usage, and a measured before-and-after fix to the end-to-end retrieval path.
+
+V0.8 is the public release candidate: repository audit, container packaging, a
+documented architecture, and version alignment across the tree. No planner
+behaviour and no benchmark number changed in this version.
+
+V0.8.1 hardened the public repository metadata ahead of the formal release:
+credential-shaped test sentinels were replaced with obviously synthetic values,
+the RAG corpus directory name in the documented examples was corrected, and the
+historical `git_worktree_dirty` flag was documented rather than backfilled. No
+planner behaviour and no benchmark number changed.
+
+V0.8.2 is the formal public release: an MIT license, a hermetic GitHub Actions
+workflow that mirrors the local quality gates, repository description and
+topics, and published release notes. No planner behaviour and no benchmark
+number changed in this version.
+
+V0.8.3 was a cross-platform patch. The RAG provider derived a document name with
+`Path(...).name`, which does not split Windows separators on POSIX, so the same
+test passed locally and failed on the Linux CI runner. Document name extraction
+is now explicit about both separators. No planner behaviour and no benchmark
+number changed.
+
+V0.8.4 makes the Docker RAG path reproducible. The published image installs the
+core requirements only, while the local RAG provider additionally needs the
+optional dependency set, so mounting a RAG checkout turned out to be necessary
+but not sufficient. A build argument now selects a RAG-enabled image, Compose
+exposes it behind a discoverable profile, and both shapes are runtime-validated.
+No planner behaviour and no benchmark number changed.
+
+V0.8.5 adds a second device data source backed by a public real-world dataset:
+the UCI MetroPT-3 air production unit, served under `METRO-APU-001` through the
+existing `get_device_status` tool with no schema change and no new tool. Status is
+derived from documented control contacts and always labelled as derived, since
+the dataset publishes no ground-truth equipment state. The dataset is never
+downloaded at run time, never enters the image, and is read through a bounded tail
+window rather than parsed whole. The rule planner needed one lexer change to
+recognise a two-segment identifier; its effect on the frozen benchmark was
+measured before and after and is zero on all nine metrics.
+
+V0.9 makes the service observable in production without changing what it decides.
+Structured logging, with `LOG_FORMAT=json` as an opt-in alongside the historical
+text line, a Prometheus endpoint at `GET /metrics`, and optional OpenTelemetry
+tracing are added as a layer that observes the pipeline from outside. Planner,
+tool, graph and integration modules import no metrics or tracing library; they
+call helpers in `app/observability/instrumentation.py`. Every label value comes
+from a frozen vocabulary, so no request id, device id or query text can become a
+time series, and tracing imports nothing and opens no socket when it is disabled.
+The frozen benchmark was rerun before and after the change: all nine functional
+metrics and every failure record are byte-identical, and the measured latency cost
+is published separately rather than asserted.
+
+</details>
 
 ## Roadmap
 
