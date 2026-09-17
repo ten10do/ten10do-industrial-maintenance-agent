@@ -1,103 +1,85 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 802" width="1200" height="802" role="img" aria-label="Industrial Maintenance Agent request flow: real device data sources feed device adapters, then a LangGraph agent workflow with a rule or optional LLM planner calls three tools, the answer is rendered from tool evidence, and the HTTP service exposes logs, Prometheus metrics and optional OpenTelemetry traces.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 712" width="1000" height="712" role="img" aria-label="Request flow. Real MetroPT-3 sensor data and seeded device rows feed device adapters. A LangGraph workflow plans with the rule planner or an optional LLM planner, then calls three registry tools: get device status, query alarm code and search the maintenance manual. The answer is rendered from tool evidence with provenance. FastAPI serves POST /agent/invoke, GET /health and GET /metrics. An observability layer records structured logs, Prometheus metrics and optional traces.">
   <title>Industrial Maintenance Agent - request flow</title>
 
   <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#8c959f"/>
     </marker>
   </defs>
 
-  <!-- canvas -->
-  <rect x="0" y="0" width="1200" height="802" rx="12" fill="#ffffff"/>
-  <rect x="0.5" y="0.5" width="1199" height="801" rx="12" fill="none" stroke="#d0d7de"/>
+  <rect x="0" y="0" width="1000" height="712" rx="12" fill="#ffffff"/>
+  <rect x="0.5" y="0.5" width="999" height="711" rx="12" fill="none" stroke="#d0d7de"/>
 
-  <!-- heading -->
-  <text x="44" y="52" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="600" fill="#1f2328">Industrial Maintenance Agent</text>
-  <text x="44" y="78" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13.5" fill="#59636e">Deterministic tool calling, evidence-grounded answers, optional LLM planner, optional industrial RAG.</text>
+  <text x="20" y="40" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="600" fill="#1f2328">Industrial Maintenance Agent</text>
+  <text x="20" y="64" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#59636e">Deterministic tool calling, evidence-grounded answers, optional LLM planner and industrial RAG.</text>
 
-  <!-- legend: solid = on by default, dashed = optional -->
-  <line x1="872" y1="46" x2="912" y2="46" stroke="#8c959f" stroke-width="1.5"/>
-  <text x="920" y="50" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#59636e">on by default</text>
-  <line x1="872" y1="72" x2="912" y2="72" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 4"/>
-  <text x="920" y="76" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#59636e">optional, off by default</text>
+  <line x1="700" y1="34" x2="736" y2="34" stroke="#8c959f" stroke-width="1.5"/>
+  <text x="744" y="38" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#59636e">on by default</text>
+  <line x1="700" y1="58" x2="736" y2="58" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="744" y="62" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#59636e">optional, off by default</text>
 
-  <!-- stage 1: data sources -->
-  <text x="44" y="118" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" font-weight="600" fill="#59636e" letter-spacing="0.6">DATA SOURCES</text>
-  <rect x="44" y="130" width="536" height="58" rx="8" fill="#ddf4ff" stroke="#54aeff"/>
-  <text x="64" y="154" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">UCI MetroPT-3</text>
-  <text x="64" y="173" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#3d4751">real 1 Hz sensor readings, metro air production unit, CC BY 4.0</text>
+  <text x="20" y="98" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11" font-weight="600" fill="#59636e">DATA SOURCES</text>
 
-  <rect x="604" y="130" width="552" height="58" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
-  <text x="624" y="154" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">Seeded device rows</text>
-  <text x="624" y="173" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#3d4751">SQLite fixtures (PLC-001, PLC-002, Robot-001, CNC-001) written for this repo</text>
+  <rect x="20" y="108" width="470" height="60" rx="8" fill="#ddf4ff" stroke="#54aeff"/>
+  <text x="38" y="134" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">Real device data</text>
+  <text x="38" y="154" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#3d4751">UCI MetroPT-3, 1 Hz, CC BY 4.0</text>
 
-  <line x1="600" y1="188" x2="600" y2="214" stroke="#8c959f" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="510" y="108" width="470" height="60" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+  <text x="528" y="134" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">Demo device rows</text>
+  <text x="528" y="154" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#3d4751">seeded SQLite fixtures</text>
 
-  <!-- stage 2: adapters -->
-  <rect x="44" y="218" width="1112" height="54" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
-  <text x="66" y="243" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f2328">Device data adapters</text>
-  <text x="230" y="243" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#59636e">one adapter per source, resolved by device id, returns a frozen snapshot or an explicit source error</text>
-  <text x="66" y="262" font-family="Consolas, Courier New, monospace" font-size="11.5" fill="#59636e">app/integrations/device_data/</text>
+  <line x1="500" y1="168" x2="500" y2="194" stroke="#8c959f" stroke-width="1.5" marker-end="url(#a)"/>
 
-  <line x1="600" y1="272" x2="600" y2="298" stroke="#8c959f" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="20" y="196" width="960" height="48" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+  <text x="38" y="226" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">Device data adapters</text>
+  <text x="238" y="226" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#59636e">resolved by device id, returning a frozen snapshot</text>
 
-  <!-- stage 3: agent workflow -->
-  <rect x="44" y="302" width="1112" height="54" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
-  <text x="66" y="327" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f2328">Agent workflow (LangGraph)</text>
-  <text x="262" y="327" font-family="Consolas, Courier New, monospace" font-size="12.5" fill="#59636e">route_query → plan_actions → execute_tools → retrieve_context → synthesize</text>
-  <text x="66" y="346" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#59636e">single-shot planning: no re-plan loop after execution, so the planner benchmark stays a measurement of planning</text>
+  <line x1="500" y1="244" x2="500" y2="270" stroke="#8c959f" stroke-width="1.5" marker-end="url(#a)"/>
 
-  <line x1="600" y1="356" x2="600" y2="382" stroke="#8c959f" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="20" y="272" width="960" height="48" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+  <text x="38" y="302" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">Agent workflow, LangGraph</text>
+  <text x="262" y="302" font-family="Consolas, Courier New, monospace" font-size="12.5" fill="#3d4751">route &#8594; plan &#8594; execute &#8594; retrieve &#8594; synthesize</text>
 
-  <!-- stage 4: planners -->
-  <rect x="44" y="386" width="536" height="54" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
-  <text x="64" y="411" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f2328">Rule planner</text>
-  <text x="64" y="430" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#3d4751">default. no LLM in the process at any stage</text>
+  <line x1="500" y1="320" x2="500" y2="346" stroke="#8c959f" stroke-width="1.5" marker-end="url(#a)"/>
 
-  <rect x="604" y="386" width="552" height="54" rx="8" fill="#ffffff" stroke="#8c959f" stroke-dasharray="5 4"/>
-  <text x="624" y="411" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f2328">LLM planner</text>
-  <text x="624" y="430" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#3d4751">selects tools and arguments only, never writes the answer, never sees retrieval results</text>
+  <rect x="20" y="348" width="470" height="56" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+  <text x="38" y="373" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">Rule planner</text>
+  <text x="38" y="392" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#59636e">default, no LLM in the process</text>
 
-  <line x1="600" y1="440" x2="600" y2="466" stroke="#8c959f" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <text x="612" y="458" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#59636e">both emit the same validated</text>
-  <text x="612" y="472" font-family="Consolas, Courier New, monospace" font-size="11.5" fill="#59636e">AgentPlan</text>
+  <rect x="510" y="348" width="470" height="56" rx="8" fill="#ffffff" stroke="#8c959f" stroke-dasharray="5 4"/>
+  <text x="528" y="373" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">LLM planner</text>
+  <text x="528" y="392" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#59636e">selects tools and arguments only</text>
 
-  <!-- stage 5: tools -->
-  <rect x="44" y="478" width="352" height="62" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
-  <text x="64" y="504" font-family="Consolas, Courier New, monospace" font-size="13" font-weight="600" fill="#1f2328">get_device_status</text>
-  <text x="64" y="524" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#59636e">SQLite row or external sensor dataset</text>
+  <line x1="500" y1="404" x2="500" y2="430" stroke="#8c959f" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="512" y="422" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#59636e">both emit the same validated AgentPlan</text>
 
-  <rect x="424" y="478" width="352" height="62" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
-  <text x="444" y="504" font-family="Consolas, Courier New, monospace" font-size="13" font-weight="600" fill="#1f2328">query_alarm_code</text>
-  <text x="444" y="524" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#59636e">local alarm catalog, no network</text>
+  <rect x="20" y="432" width="304" height="56" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+  <text x="38" y="457" font-family="Consolas, Courier New, monospace" font-size="13" font-weight="600" fill="#1f2328">get_device_status</text>
+  <text x="38" y="476" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#59636e">SQLite or dataset</text>
 
-  <rect x="804" y="478" width="352" height="62" rx="8" fill="#ffffff" stroke="#8c959f" stroke-dasharray="5 4"/>
-  <text x="824" y="504" font-family="Consolas, Courier New, monospace" font-size="13" font-weight="600" fill="#1f2328">search_maintenance_manual</text>
-  <text x="824" y="524" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#59636e">industrial RAG, local or HTTP provider</text>
+  <rect x="348" y="432" width="304" height="56" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+  <text x="366" y="457" font-family="Consolas, Courier New, monospace" font-size="13" font-weight="600" fill="#1f2328">query_alarm_code</text>
+  <text x="366" y="476" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#59636e">local alarm catalog</text>
 
-  <text x="44" y="560" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#59636e">Tools sit behind one registry with Pydantic input models, so a plan that names an unknown tool or a bad argument fails validation instead of running.</text>
+  <rect x="676" y="432" width="304" height="56" rx="8" fill="#ffffff" stroke="#8c959f" stroke-dasharray="5 4"/>
+  <text x="694" y="457" font-family="Consolas, Courier New, monospace" font-size="13" font-weight="600" fill="#1f2328">search_maintenance_manual</text>
+  <text x="694" y="476" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#59636e">industrial RAG</text>
 
-  <line x1="600" y1="572" x2="600" y2="598" stroke="#8c959f" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="500" y1="488" x2="500" y2="514" stroke="#8c959f" stroke-width="1.5" marker-end="url(#a)"/>
 
-  <!-- stage 6: evidence -->
-  <rect x="44" y="602" width="1112" height="54" rx="8" fill="#dafbe1" stroke="#4ac26b"/>
-  <text x="66" y="627" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="600" fill="#1f2328">Evidence + deterministic synthesis</text>
-  <text x="330" y="627" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#3d4751">the answer text is rendered from tool results and retrieved passages, not generated</text>
-  <text x="66" y="646" font-family="Consolas, Courier New, monospace" font-size="11.5" fill="#3d4751">response.evidence[] carries the provenance: source, tool, document, page, score</text>
+  <rect x="20" y="516" width="960" height="48" rx="8" fill="#dafbe1" stroke="#4ac26b"/>
+  <text x="38" y="546" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">Evidence-grounded answer</text>
+  <text x="248" y="546" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#3d4751">rendered from tool results, with the provenance returned alongside it</text>
 
-  <line x1="600" y1="656" x2="600" y2="682" stroke="#8c959f" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="500" y1="564" x2="500" y2="590" stroke="#8c959f" stroke-width="1.5" marker-end="url(#a)"/>
 
-  <!-- stage 7: http -->
-  <rect x="44" y="686" width="1112" height="50" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
-  <text x="66" y="710" font-family="Consolas, Courier New, monospace" font-size="13.5" font-weight="600" fill="#1f2328">POST /agent/invoke</text>
-  <text x="252" y="710" font-family="Consolas, Courier New, monospace" font-size="12.5" fill="#59636e">GET /health</text>
-  <text x="366" y="710" font-family="Consolas, Courier New, monospace" font-size="12.5" fill="#59636e">GET /metrics</text>
-  <text x="500" y="710" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#59636e">FastAPI + Uvicorn, layered so the transport never imports the workflow</text>
-  <text x="66" y="728" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="11.5" fill="#59636e">Docker: one image per dependency shape (core 384 MB, +OTel 423 MB, +local RAG 760 MB), runs as a non-root user</text>
+  <rect x="20" y="592" width="960" height="48" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+  <text x="38" y="622" font-family="Consolas, Courier New, monospace" font-size="13.5" font-weight="600" fill="#1f2328">POST /agent/invoke</text>
+  <text x="212" y="622" font-family="Consolas, Courier New, monospace" font-size="12.5" fill="#59636e">GET /health</text>
+  <text x="320" y="622" font-family="Consolas, Courier New, monospace" font-size="12.5" fill="#59636e">GET /metrics</text>
+  <text x="446" y="622" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#59636e">FastAPI and Uvicorn, Docker, non-root user</text>
 
-  <!-- observability strip -->
-  <rect x="44" y="750" width="1112" height="34" rx="8" fill="#fff8c5" stroke="#d4a72c"/>
-  <text x="66" y="771" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#1f2328">Observability</text>
-  <text x="166" y="771" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12" fill="#3d4751">structured logs (text or JSON) · 11 Prometheus metrics on a bounded label vocabulary · OpenTelemetry tracing, optional and off by default</text>
-
+  <rect x="20" y="656" width="960" height="40" rx="8" fill="#fff8c5" stroke="#d4a72c"/>
+  <text x="38" y="681" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="600" fill="#1f2328">Observability</text>
+  <text x="134" y="681" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" fill="#3d4751">structured logs, text or JSON &#183; 11 Prometheus metrics &#183; optional OpenTelemetry tracing</text>
 </svg>
