@@ -31,7 +31,7 @@ services:
       args:
         # Default shape: core dependencies only.
         INSTALL_RAG_DEPS: "0"
-    image: industrial-maintenance-agent:0.8.5
+    image: industrial-maintenance-agent:0.9.0
     container_name: industrial-maintenance-agent
     ports:
       - "8000:8000"
@@ -81,7 +81,7 @@ services:
       args:
         # RAG shape: adds requirements-rag-local.txt on top of the core set.
         INSTALL_RAG_DEPS: "1"
-    image: industrial-maintenance-agent:0.8.5-rag
+    image: industrial-maintenance-agent:0.9.0-rag
     container_name: industrial-maintenance-agent-rag
     ports:
       # Separate host port so both services can run side by side.
@@ -135,7 +135,7 @@ services:
         # Same standalone shape as the "agent" service. The real dataset is
         # mounted, not baked in, so the image is identical.
         INSTALL_RAG_DEPS: "0"
-    image: industrial-maintenance-agent:0.8.5
+    image: industrial-maintenance-agent:0.9.0
     container_name: industrial-maintenance-agent-real-data
     ports:
       # Separate host port so the services can run side by side.

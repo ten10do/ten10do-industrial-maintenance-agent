@@ -156,6 +156,18 @@ window rather than parsed whole. The rule planner needed one lexer change to
 recognise a two-segment identifier; its effect on the frozen benchmark was
 measured before and after and is zero on all nine metrics.
 
+V0.9 makes the service observable in production without changing what it decides.
+Structured logging, with `LOG_FORMAT=json` as an opt-in alongside the historical
+text line, a Prometheus endpoint at `GET /metrics`, and optional OpenTelemetry
+tracing are added as a layer that observes the pipeline from outside. Planner,
+tool, graph and integration modules import no metrics or tracing library; they
+call helpers in `app/observability/instrumentation.py`. Every label value comes
+from a frozen vocabulary, so no request id, device id or query text can become a
+time series, and tracing imports nothing and opens no socket when it is disabled.
+The frozen benchmark was rerun before and after the change: all nine functional
+metrics and every failure record are byte-identical, and the measured latency cost
+is published separately rather than asserted.
+
 ### Device data sources
 
 | Source | Identifiers | Nature | Evidence source |
@@ -290,13 +302,20 @@ industrial-maintenance-agent/
 │   │   ├── session.py       # Engine + session factory
 │   │   ├── init_db.py       # Schema creation + seed helpers / CLI
 │   │   └── __main__.py      # `python -m app.database` entry point
-│   └── tools/
+│   ├── tools/
 │       ├── names.py         # Canonical tool names (ToolName enum)
 │       ├── registry.py      # Tool registry, carries each tool's input model
 │       ├── arguments.py     # Strict argument validation, shared by both layers
 │       ├── device_tool.py   # get_device_status (SQLite rows, or an external source)
 │       ├── alarm_tool.py    # query_alarm_code (data/alarms.json backed)
 │       └── maintenance_manual_tool.py  # search_maintenance_manual (RAG backed)
+│   └── observability/       # Logging, metrics, tracing (V0.9)
+│       ├── labels.py        # Frozen label vocabularies + bounded() fallback
+│       ├── logging.py       # Structured events, redaction, JSON formatter
+│       ├── context.py       # request_id propagation (ContextVar)
+│       ├── metrics.py       # METRIC_SPECS, private registry, render()
+│       ├── tracing.py       # Deferred-import OTel spans, attribute allow-list
+│       └── instrumentation.py  # The only observability surface business code calls
 ├── evaluation/                  # The Agent evaluation framework, the only one
 │   ├── dataset.json             # 49 hand-authored cases + ground-truth policy
 │   ├── dataset.py               # Dataset models and answer-key validation
@@ -324,6 +343,7 @@ industrial-maintenance-agent/
 │   ├── test_planner_comparison.py  # rule vs LLM delta, refusals, hash lock
 │   ├── test_docker_config.py    # Docker build shapes: standalone vs RAG guard
 │   ├── test_device_data.py      # External device source: parsing, dispatch, SQLite regression
+│   ├── test_observability.py    # Metrics, labels, logging, redaction, OTel, cardinality
 │   └── fixtures/
 │       ├── metropt3_sample.csv  # SYNTHETIC adapter fixture, not real measurements
 │       └── README.md            # States that the fixture is synthetic
@@ -339,25 +359,30 @@ industrial-maintenance-agent/
 │   ├── llm_planner_probe.py         # Real LLM planner smoke gate, no fabrication
 │   ├── prepare_metropt3.py          # Validate a local MetroPT-3 CSV; never downloads
 │   ├── real_data_gate.py            # Gate: the service answers from the real CSV
-│   └── real_data_agent_gate.py      # Gate: POST /agent/invoke for METRO-APU-001
+│   ├── real_data_agent_gate.py      # Gate: POST /agent/invoke for METRO-APU-001
+│   └── observability_overhead.py    # Latency cost of metrics and tracing, off vs on
 ├── docs/
 │   ├── architecture.md      # Component map, request lifecycle, planner path
+│   ├── observability.md     # Logging, metrics catalog, label policy, tracing, security
 │   ├── data/
 │   │   └── metropt3.md      # Source, licence, field mapping, measured facts
 │   ├── evaluation/
-│   │   └── real_data_integration.md  # What the real-data integration does not prove
+│   │   ├── real_data_integration.md  # What the real-data integration does not prove
+│   │   └── observability_overhead.md # Measured overhead + benchmark integrity check
 │   └── releases/            # Published release notes
 │       ├── v0.8.3.md
 │       ├── v0.8.4.md
-│       └── v0.8.5.md
+│       ├── v0.8.5.md
+│       └── v0.9.0.md
 ├── .github/
 │   └── workflows/ci.yml     # Hermetic CI: pytest + ruff + mypy, no secrets
 ├── LICENSE                  # MIT
 ├── requirements.txt             # Runtime dependencies
 ├── requirements-dev.txt         # Dev / test dependencies
 ├── requirements-rag-local.txt   # Optional deps for RAG_PROVIDER=local
+├── requirements-otel.txt        # Optional deps for OTEL_ENABLED=true
 ├── pyproject.toml           # Project metadata + tool config
-├── Dockerfile               # Unprivileged image; INSTALL_RAG_DEPS selects a shape
+├── Dockerfile               # Unprivileged image; INSTALL_RAG_DEPS / INSTALL_OTEL_DEPS select a shape
 ├── .dockerignore            # Keeps .env, caches and working state out of the context
 ├── docker-compose.yml       # agent, plus agent-rag and agent-real-data behind profiles
 ├── .env.example             # Environment template, placeholders only
@@ -462,6 +487,39 @@ behave exactly as before. Setting the variable adds one device,
 `METRO-APU-001`. No path is hardcoded, and the service never downloads the
 dataset: it reads the file you point it at, and nothing else.
 
+### Observability
+
+Logging, Prometheus metrics and OpenTelemetry tracing. The layer observes the
+pipeline from outside and changes no decision: the frozen benchmark results are
+identical with it enabled and disabled.
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `LOG_FORMAT` | `text` | `text` is the single-line format this service always emitted. `json` emits one object per line with a fixed field set |
+| `METRICS_ENABLED` | `true` | Prometheus metrics on `GET /metrics`. When `false` the endpoint answers `404` and no series is recorded; logging is unaffected |
+| `OTEL_ENABLED` | `false` | OpenTelemetry tracing. `false` imports nothing and opens no connection. Requires the optional set in `requirements-otel.txt` |
+| `OTEL_SERVICE_NAME` | `industrial-maintenance-agent` | Value of the `service.name` resource attribute |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | empty | OTLP/HTTP endpoint. Deliberately empty: an empty value keeps spans in the process, so no collector is assumed to exist |
+
+Two properties are worth stating because they are the ones an operator notices.
+
+Metrics are **cardinality-safe by construction**. Every label value is drawn from
+a frozen vocabulary and anything outside it becomes `other`, so the largest
+metric has 120 series and no request can raise that count. No request id, device
+id, query text or exception message can become a label.
+
+Tracing is **off in the sense of doing nothing**. With `OTEL_ENABLED=false`
+neither the API nor the SDK is imported, no exporter is built and no socket is
+opened. Naming an endpoint is the only thing that produces an exporter.
+
+`GET /metrics` answers `404` rather than an empty body when disabled, because a
+collector treats a scrape target answering `200` as healthy.
+
+The full metric catalog, the label vocabularies, the span hierarchy and the
+redaction rules are in [`docs/observability.md`](docs/observability.md). The
+measured latency cost is in
+[`docs/evaluation/observability_overhead.md`](docs/evaluation/observability_overhead.md).
+
 ## Running the service
 
 ```bash
@@ -487,11 +545,12 @@ Interactive API docs are served at `/docs` and `/redoc`; the raw schema is at
 The image runs the deterministic planner by default, so it needs no credential.
 It runs as an unprivileged user and writes SQLite to a named volume.
 
-There are two build shapes from this one Dockerfile, selected by the
-`INSTALL_RAG_DEPS` build argument, exposed as three Compose services: a plain
-`up` starts one of them, and the other two sit behind the `rag` and `real-data`
-profiles so that neither an LLM checkout nor a dataset is required to start the
-default service.
+Two build arguments shape the image, and three Compose services expose the
+combinations that matter. `INSTALL_RAG_DEPS` selects whether the optional
+retrieval dependency set is installed, and `INSTALL_OTEL_DEPS` selects whether
+the OpenTelemetry SDK is installed. A plain `up` starts one service, and the
+other two sit behind the `rag` and `real-data` profiles so that neither an LLM
+checkout nor a dataset is required to start the default service.
 
 #### A. Standalone
 
@@ -500,8 +559,8 @@ the alarm tool, the rule planner and the FastAPI service. It needs no LLM key
 and no Industrial Knowledge RAG checkout.
 
 ```bash
-docker build -t industrial-maintenance-agent:0.8.5 .
-docker run --rm -p 8000:8000 industrial-maintenance-agent:0.8.5
+docker build -t industrial-maintenance-agent:0.9.0 .
+docker run --rm -p 8000:8000 industrial-maintenance-agent:0.9.0
 ```
 
 With Compose:
@@ -521,6 +580,28 @@ environment.
 This shape deliberately omits the optional RAG dependency set. `numpy`,
 `scikit-learn` and `pypdf` are absent from it. That is the intended state, not a
 defect, and it keeps the default image small.
+
+It also omits the OpenTelemetry SDK, for the same reason: `OTEL_ENABLED` defaults
+to `false` and a disabled tracer imports nothing, so the SDK would be dead weight
+in every container that does not trace. Setting `OTEL_ENABLED=true` against this
+image is safe but produces no spans: the service starts, logs
+`otel_sdk_missing tracing_disabled=true`, and carries on. Add the SDK through the
+second build argument when you intend to trace:
+
+```bash
+docker build --build-arg INSTALL_OTEL_DEPS=1 -t industrial-maintenance-agent:0.9.0-otel .
+docker run --rm -p 8000:8000 \
+  -e OTEL_ENABLED=true \
+  -e OTEL_SERVICE_NAME=industrial-maintenance-agent \
+  -e OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318/v1/traces \
+  industrial-maintenance-agent:0.9.0-otel
+```
+
+Leaving `OTEL_EXPORTER_OTLP_ENDPOINT` empty is supported and is the default. It
+keeps spans in the process, which is useful for a smoke check and is what the
+overhead measurement uses; a collector is contacted only when an endpoint is
+named. The measured cost of the whole image is 423 MB against 384 MB for the
+default shape.
 
 #### B. RAG-enabled
 
@@ -642,6 +723,38 @@ plus two additional devices.
 
 
 ## API
+
+### `GET /metrics`
+
+Prometheus metrics for the pipeline, in the text exposition format
+(`text/plain; version=0.0.4; charset=utf-8`). It needs no collector, no
+credential and no configuration to answer.
+
+```bash
+curl -s http://127.0.0.1:8000/metrics | grep '^industrial_agent_requests_total'
+```
+
+```text
+industrial_agent_requests_total{intent="device_status",planner="rule",status="success"} 5.0
+```
+
+Eleven metrics cover the invocation, the planning step, the tool calls, the
+retrieval calls and the provider calls, plus provider-reported token usage. When
+`METRICS_ENABLED=false` the route answers `404`, because a collector treats a
+scrape target answering `200` as healthy and an operator who disabled metrics
+wants the target gone.
+
+Three details that matter when reading the output. Latency is recorded in
+**seconds**, with the unit in the metric name, while the API reports
+milliseconds. A cold process lists all eleven metrics with their `HELP` and
+`TYPE` lines but no series, because a series appears only once something is
+observed, so a dashboard rule should tolerate an absent sample. The four
+business outcomes are distinct: `not_found` (the device or the alarm code is
+simply not there) and `unavailable` (a backing source could not be read) are not
+reported as `error`.
+
+The catalog, the label vocabularies and the cardinality bound are in
+[`docs/observability.md`](docs/observability.md).
 
 ### `POST /agent/invoke`
 
@@ -809,6 +922,20 @@ exception message can embed a provider URL, a header or a key fragment, so it is
 deliberately not logged. Neither line records an environment value, a credential
 or a traceback.
 
+`LOG_FORMAT=json` adds one object per line for a log pipeline, with the same call
+sites and a fixed field set:
+
+```json
+{"timestamp": "2026-09-16T10:49:41+0000", "level": "INFO", "event": "tool.completed", "logger": "app.observability", "message": "tool_completed tool=get_device_status status=success duration_ms=1.861", "request_id": "6c5e881c-...", "tool": "get_device_status", "status": "success", "duration_ms": 1.861}
+```
+
+The text format is the default and is unchanged, byte for byte, from V0.8. The
+JSON format carries no query text: the legacy `message` field renders the query
+for operators, and the JSON formatter replaces that rendering with
+`query=<redacted>` before serializing, so no user text reaches a structured
+record. The event vocabulary and the field set are enumerable, and are listed in
+[`docs/observability.md`](docs/observability.md).
+
 ### Layering
 
 `app/main.py` composes and nothing more. `app/api` holds transport models,
@@ -817,6 +944,14 @@ holds `AgentService`, which calls the graph, generates the request id, measures
 latency and maps the final state onto the response schema. `app/agent` holds the
 workflow, unaware that HTTP exists. The compiled graph is therefore reachable
 through exactly one route.
+
+`app/observability` sits beside `app/tools` and `app/integrations`: it may read
+application state, and no other layer depends on it for correctness. Planner,
+tool, graph and integration modules do not import `prometheus_client` or
+`opentelemetry`; they call helpers in `app/observability/instrumentation.py`,
+which owns the mapping from an application event onto a metric, a span and a log
+line. That is what keeps a metric name or a label a one-file change, and what
+makes it impossible for a call site to invent a label.
 
 ### Demo examples
 

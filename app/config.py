@@ -11,6 +11,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 #: planner when the LLM cannot produce a plan.
 PlannerMode = Literal["rule", "llm", "auto"]
 
+#: Log rendering. ``text`` is the human-readable line this service has always
+#: emitted; ``json`` is one object per line for a log pipeline.
+LogFormat = Literal["text", "json"]
+
 
 class Settings(BaseSettings):
     """Runtime configuration for the service."""
@@ -24,12 +28,16 @@ class Settings(BaseSettings):
 
     # Application
     app_name: str = "Industrial Maintenance Agent"
-    app_version: str = "0.8.5"
+    app_version: str = "0.9.0"
     environment: str = "development"
     debug: bool = False
     # Verbosity for the ``app`` logger namespace. A mistyped value fails loudly
     # at startup rather than silently logging at the wrong level.
     log_level: str = "INFO"
+    # Rendering for every record the ``app`` namespace emits. ``text`` is the
+    # historical single-line format and stays the default, so enabling structured
+    # logging is a deliberate act. See app/observability/logging.py.
+    log_format: LogFormat = "text"
 
     # Server
     host: str = "0.0.0.0"
@@ -82,6 +90,19 @@ class Settings(BaseSettings):
     # 208 MiB, is never bundled with this repository, and is never downloaded by
     # the running service: only the path is read. See docs/data/metropt3.md.
     metropt3_csv_path: str = ""
+
+    # --- Observability ---
+    # Prometheus metrics. When false, GET /metrics answers 404 and no series is
+    # recorded. Logging is unaffected: the log contract predates this switch.
+    metrics_enabled: bool = True
+
+    # OpenTelemetry tracing. Off by default, and off means nothing is imported
+    # and no socket is opened. An OTLP endpoint has no default on purpose:
+    # pointing at a local collector would turn an optional feature into a
+    # runtime dependency on a process the operator may not have started.
+    otel_enabled: bool = False
+    otel_service_name: str = "industrial-maintenance-agent"
+    otel_exporter_otlp_endpoint: str = ""
 
 
 @lru_cache

@@ -14,10 +14,16 @@ from app.api.routes import agent_router, meta_router
 from app.config import get_settings
 from app.database.init_db import init_db
 from app.logging_config import configure_logging
+from app.observability import configure_observability
 
 settings = get_settings()
 
-configure_logging(settings.log_level)
+configure_logging(settings.log_level, settings.log_format)
+
+# Tracing is configured once, at the entry point, and only when it is enabled.
+# With OTEL_ENABLED unset this imports nothing and opens no connection, so a
+# deployment without a collector starts exactly as it did before.
+configure_observability(settings)
 
 
 @asynccontextmanager

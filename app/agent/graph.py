@@ -20,6 +20,7 @@ Node order:
 """
 
 from collections.abc import Callable
+from time import perf_counter
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
@@ -28,6 +29,7 @@ from pydantic import BaseModel
 from app.agent.parser import Intent, parse_query
 from app.agent.planners.dispatch import dispatch_plan
 from app.agent.state import MaintenanceState
+from app.observability import instrumentation
 from app.schemas.evidence import Evidence, SourceType
 from app.tools import registry
 from app.tools.arguments import ToolArgumentError, validate_tool_arguments
@@ -151,6 +153,43 @@ def _as_payload(value: Any) -> Any:
     return value
 
 
+def _invoke_tool(name: str, spec: Any, arguments: dict[str, Any]) -> Any:
+    """Call one registered tool, measured.
+
+    The call itself is unchanged: the same callable, the same keyword arguments,
+    the same return value. This wrapper adds a duration, a span and an outcome
+    derived from the tool's own payload, so the executor's decisions and the tool
+    contract are untouched.
+
+    An exception propagates exactly as before. A tool that raises is a tool
+    failure, and swallowing it here would turn it into an empty result the caller
+    could mistake for "nothing found".
+    """
+    started = perf_counter()
+    instrumentation.tool_started(tool=name)
+    with instrumentation.tool_span(tool=name) as active_span:
+        try:
+            value = spec.func(**arguments)
+        except Exception as exc:
+            instrumentation.tool_failed(
+                tool=name,
+                error_type=type(exc).__name__,
+                duration_ms=instrumentation.elapsed_ms(started),
+            )
+            active_span.record_error(type(exc).__name__)
+            raise
+
+        payload = _as_payload(value)
+        status = instrumentation.tool_status_from_payload(payload)
+        instrumentation.tool_completed(
+            tool=name,
+            status=status,
+            duration_ms=instrumentation.elapsed_ms(started),
+        )
+        active_span.set_attribute("status", status)
+        return payload
+
+
 def _execute_planned_calls(planned: list[dict[str, Any]]) -> dict[str, Any]:
     """Run an explicit call list produced by the LLM planner.
 
@@ -187,7 +226,7 @@ def _execute_planned_calls(planned: list[dict[str, Any]]) -> dict[str, Any]:
             errors.append(str(exc))
             continue
 
-        results.append({"tool": name, "result": _as_payload(spec.func(**validated))})
+        results.append({"tool": name, "result": _invoke_tool(name, spec, validated)})
 
     update: dict[str, Any] = {"tool_results": results}
     if errors:
@@ -239,7 +278,7 @@ def execute_tools(state: MaintenanceState) -> dict[str, Any]:
             errors.append(f"missing state values for {name}: {', '.join(missing)}")
             continue
 
-        results.append({"tool": name, "result": _as_payload(spec.func(**arguments))})
+        results.append({"tool": name, "result": _invoke_tool(name, spec, arguments)})
 
     update: dict[str, Any] = {"tool_results": results}
     if errors:
@@ -560,13 +599,16 @@ def synthesize(state: MaintenanceState) -> dict[str, Any]:
     if not evidence:
         evidence = [item.model_dump(mode="json") for item in _standardize_evidence(tool_results)]
 
-    final_answer = "\n\n".join(
-        [
-            _device_section(device_payload),
-            _alarm_section(alarm_payload),
-            _manual_section(manual_payload),
-        ]
-    )
+    # The span carries the evidence count and nothing else: the answer text is
+    # generated here and must not become a span attribute.
+    with instrumentation.synthesis_span(evidence_count=len(evidence)):
+        final_answer = "\n\n".join(
+            [
+                _device_section(device_payload),
+                _alarm_section(alarm_payload),
+                _manual_section(manual_payload),
+            ]
+        )
 
     return {
         "evidence": evidence,

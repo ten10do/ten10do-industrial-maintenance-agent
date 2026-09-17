@@ -1,5 +1,11 @@
 -r requirements.txt
 
+# OpenTelemetry. Tracing is optional at runtime, but the tests exercise the real
+# SDK, so the optional set is a development dependency. That keeps the assertion
+# "tracing is inert when disabled" honest: the packages are present and the code
+# still imports and calls nothing.
+-r requirements-otel.txt
+
 # --- Testing ---
 pytest>=8.0,<9.0
 pytest-asyncio>=0.23,<1.0

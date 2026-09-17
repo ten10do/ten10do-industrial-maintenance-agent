@@ -1,0 +1,24 @@
+# Optional OpenTelemetry tracing dependencies.
+#
+# Install these only when you intend to trace:
+#
+#     pip install -r requirements-otel.txt
+#
+# They are not part of requirements.txt because tracing is off by default and the
+# import is deferred: with OTEL_ENABLED unset, app/observability/tracing.py
+# imports none of these and opens no connection. A deployment that does not trace
+# therefore does not install them.
+#
+# Installing them alone changes nothing. Tracing starts only when OTEL_ENABLED is
+# true, and a collector is contacted only when OTEL_EXPORTER_OTLP_ENDPOINT names
+# one. There is no default endpoint, so enabling tracing without naming an
+# exporter keeps spans in the process and never reaches for localhost.
+
+# Tracing API and SDK. The API is what the call sites would use; the SDK installs
+# a tracer provider and is what actually records spans.
+opentelemetry-api>=1.25,<2.0
+opentelemetry-sdk>=1.25,<2.0
+
+# OTLP/HTTP span exporter. Needed only to ship spans to a collector; the SDK
+# alone is enough for an in-process tracer.
+opentelemetry-exporter-otlp>=1.25,<2.0

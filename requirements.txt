@@ -22,3 +22,14 @@ alembic>=1.13,<2.0
 # --- Utilities ---
 httpx>=0.27,<0.29
 python-multipart>=0.0.9
+
+# --- Observability ---
+# Metrics are on by default and exposed on GET /metrics, so the client is a core
+# dependency rather than an extra. It runs no server: the collector is an
+# in-process registry that the endpoint renders, which is why the service starts
+# with or without a Prometheus server to scrape it.
+#
+# OpenTelemetry is deliberately NOT here. Tracing is off by default, the import
+# is deferred until it is switched on, and the optional set lives in
+# requirements-otel.txt so a deployment that does not trace does not carry it.
+prometheus-client>=0.20,<1.0

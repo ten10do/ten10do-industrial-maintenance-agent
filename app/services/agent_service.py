@@ -28,6 +28,9 @@ from app.api.schemas.agent import (
     AgentInvokeResponse,
     AgentToolStatus,
 )
+from app.config import get_settings
+from app.observability import instrumentation
+from app.observability.context import request_context
 
 logger = logging.getLogger(__name__)
 
@@ -166,53 +169,76 @@ class AgentService:
         """
         request_id = str(uuid.uuid4())
         started = perf_counter()
+        planner_mode = get_settings().planner_mode
 
-        # The guarded region covers producing a response, not merely calling the
-        # graph: a state that cannot be translated is a failure of this request
-        # and must reach the caller as a structured error rather than as an
-        # unhandled exception.
-        try:
-            state: Any = self.runner({"query": query})
-            if not isinstance(state, Mapping):
-                raise TypeError(f"graph returned {type(state).__name__}, expected a mapping")
+        with (
+            request_context(request_id),
+            instrumentation.request_span(planner_mode=planner_mode),
+        ):
+            instrumentation.request_started(planner_mode=planner_mode, query_chars=len(query))
 
-            tools_called = _tools_called(state)
-            latency_ms = _elapsed_ms(started)
-            response = AgentInvokeResponse(
-                request_id=request_id,
-                query=query,
-                intent=_optional_str(state.get("intent")),
-                equipment_id=_optional_str(state.get("equipment_id")),
-                alarm_code=_optional_str(state.get("alarm_code")),
-                tools_called=tools_called,
-                planner_used=_optional_str(state.get("planner_used")),
-                planner_fallback=bool(state.get("planner_fallback") or False),
-                answer=str(state.get("final_answer") or state.get("answer") or ""),
-                evidence=state.get("evidence") or state.get("retrieved_context") or [],
-                latency_ms=latency_ms,
-                debug_info=_debug_info(state) if debug else None,
-            )
-        except Exception as exc:
-            latency_ms = _elapsed_ms(started)
-            # Only the exception's class name is logged. Its message can embed
-            # configuration values (a provider URL, a header, a key fragment),
-            # and the log contract forbids recording those.
-            logger.error(
-                "agent_invoke_failed request_id=%s success=false latency_ms=%s error_type=%s",
+            # The guarded region covers producing a response, not merely calling the
+            # graph: a state that cannot be translated is a failure of this request
+            # and must reach the caller as a structured error rather than as an
+            # unhandled exception.
+            try:
+                state: Any = self.runner({"query": query})
+                if not isinstance(state, Mapping):
+                    raise TypeError(f"graph returned {type(state).__name__}, expected a mapping")
+
+                tools_called = _tools_called(state)
+                latency_ms = _elapsed_ms(started)
+                response = AgentInvokeResponse(
+                    request_id=request_id,
+                    query=query,
+                    intent=_optional_str(state.get("intent")),
+                    equipment_id=_optional_str(state.get("equipment_id")),
+                    alarm_code=_optional_str(state.get("alarm_code")),
+                    tools_called=tools_called,
+                    planner_used=_optional_str(state.get("planner_used")),
+                    planner_fallback=bool(state.get("planner_fallback") or False),
+                    answer=str(state.get("final_answer") or state.get("answer") or ""),
+                    evidence=state.get("evidence") or state.get("retrieved_context") or [],
+                    latency_ms=latency_ms,
+                    debug_info=_debug_info(state) if debug else None,
+                )
+            except Exception as exc:
+                latency_ms = _elapsed_ms(started)
+                # Only the exception's class name is logged. Its message can embed
+                # configuration values (a provider URL, a header, a key fragment),
+                # and the log contract forbids recording those.
+                logger.error(
+                    "agent_invoke_failed request_id=%s success=false latency_ms=%s error_type=%s",
+                    request_id,
+                    latency_ms,
+                    type(exc).__name__,
+                )
+                instrumentation.request_completed(
+                    planner=None,
+                    intent=None,
+                    status=instrumentation.STATUS_ERROR,
+                    duration_ms=latency_ms,
+                )
+                raise AgentInvocationError(request_id, latency_ms, code=_error_code(exc)) from exc
+
+            logger.info(
+                "agent_invoke request_id=%s success=true latency_ms=%s planner=%s "
+                "fallback=%s tools_called=%s query=%r",
                 request_id,
                 latency_ms,
-                type(exc).__name__,
+                response.planner_used or "-",
+                str(response.planner_fallback).lower(),
+                ",".join(tools_called) or "-",
+                query,
             )
-            raise AgentInvocationError(request_id, latency_ms, code=_error_code(exc)) from exc
-
-        logger.info(
-            "agent_invoke request_id=%s success=true latency_ms=%s planner=%s "
-            "fallback=%s tools_called=%s query=%r",
-            request_id,
-            latency_ms,
-            response.planner_used or "-",
-            str(response.planner_fallback).lower(),
-            ",".join(tools_called) or "-",
-            query,
-        )
-        return response
+            # The request metric is recorded after the response exists, so its
+            # labels describe what actually ran. ``planner_used`` is the planner
+            # that produced the plan, which is not the configured mode when
+            # ``auto`` fell back to the rule planner.
+            instrumentation.request_completed(
+                planner=response.planner_used,
+                intent=response.intent,
+                status=instrumentation.STATUS_SUCCESS,
+                duration_ms=latency_ms,
+            )
+            return response

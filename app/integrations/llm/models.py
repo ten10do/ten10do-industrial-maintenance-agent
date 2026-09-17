@@ -41,6 +41,12 @@ class LLMCompletionResult(BaseModel):
     ``text`` is the raw model output. It is deliberately not stored in the agent
     state: a model can echo its prompt, and the prompt must never reach a
     response or a log.
+
+    ``prompt_tokens`` and ``completion_tokens`` are the counts the endpoint
+    reported, or ``None`` when it reported nothing. They are optional because not
+    every OpenAI-compatible server returns a ``usage`` block, and a caller must be
+    able to tell "the provider said zero" from "the provider did not say". A
+    value is never estimated from the text.
     """
 
     text: str
@@ -48,3 +54,13 @@ class LLMCompletionResult(BaseModel):
     model: str | None = Field(default=None, description="Model reported by the endpoint.")
     latency_ms: float = Field(default=0.0, ge=0.0)
     finish_reason: str | None = Field(default=None, description="Endpoint stop reason, when given.")
+    prompt_tokens: int | None = Field(
+        default=None,
+        ge=0,
+        description="Prompt tokens reported by the endpoint, or None when it reported no usage.",
+    )
+    completion_tokens: int | None = Field(
+        default=None,
+        ge=0,
+        description="Completion tokens reported by the endpoint, or None when usage was absent.",
+    )

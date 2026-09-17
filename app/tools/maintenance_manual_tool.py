@@ -21,12 +21,15 @@ This tool performs no LLM call.
 
 from __future__ import annotations
 
+from time import perf_counter
+
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
 from app.integrations.rag import factory
 from app.integrations.rag.base import RAGProvider, RAGProviderError
 from app.integrations.rag.models import RAGSearchHit
+from app.observability import instrumentation
 
 MANUAL_TOOL_SOURCE = "rag:maintenance_manual"
 
@@ -88,35 +91,68 @@ def search_maintenance_manual(
     payload = ManualSearchInput(query=query, top_k=top_k)
     limit = payload.top_k if payload.top_k is not None else get_settings().rag_top_k
 
+    resolution_started = perf_counter()
+
     try:
         active = _resolve_provider(provider)
     except RAGProviderError as exc:
+        # No provider could be built, so the call is attributed to an unknown
+        # provider rather than to one that was never reached.
+        instrumentation.rag_unavailable(
+            provider="unknown",
+            duration_ms=instrumentation.elapsed_ms(resolution_started),
+        )
         return ManualSearchOutput(query=payload.query, error=str(exc))
 
     provider_id = active.provider_id
+    instrumentation.rag_started(provider=provider_id, top_k=limit)
 
-    try:
-        response = active.search(payload.query, top_k=limit)
-    except RAGProviderError as exc:
-        return ManualSearchOutput(
-            query=payload.query,
+    # The histogram covers the retrieval call itself. Provider construction and
+    # the lazy import of the RAG engine are deliberately outside it: folding a
+    # one-off import into a retrieval distribution would put a spike in the data
+    # that no retrieval on a warm process can reproduce.
+    retrieval_started = perf_counter()
+    with instrumentation.rag_span(provider=provider_id) as active_span:
+        try:
+            response = active.search(payload.query, top_k=limit)
+        except RAGProviderError as exc:
+            instrumentation.rag_unavailable(
+                provider=provider_id,
+                duration_ms=instrumentation.elapsed_ms(retrieval_started),
+            )
+            active_span.record_error(instrumentation.STATUS_UNAVAILABLE)
+            return ManualSearchOutput(
+                query=payload.query,
+                provider=provider_id,
+                error=str(exc),
+            )
+
+        results = [
+            ManualSearchResult(
+                content=hit.content,
+                document=hit.document,
+                page=hit.page,
+                section=hit.section,
+                chunk_id=hit.chunk_id,
+                score=hit.score,
+                score_semantics=hit.score_semantics,
+                higher_is_better=hit.higher_is_better,
+            )
+            for hit in response.hits
+        ]
+
+        # A retrieval that ran and returned nothing is a normal answer, so it is
+        # reported as not_found rather than as a failure.
+        retrieval_status = (
+            instrumentation.STATUS_SUCCESS if results else instrumentation.STATUS_NOT_FOUND
+        )
+        instrumentation.rag_completed(
             provider=provider_id,
-            error=str(exc),
+            status=retrieval_status,
+            hits=len(results),
+            duration_ms=instrumentation.elapsed_ms(retrieval_started),
         )
-
-    results = [
-        ManualSearchResult(
-            content=hit.content,
-            document=hit.document,
-            page=hit.page,
-            section=hit.section,
-            chunk_id=hit.chunk_id,
-            score=hit.score,
-            score_semantics=hit.score_semantics,
-            higher_is_better=hit.higher_is_better,
-        )
-        for hit in response.hits
-    ]
+        active_span.set_attribute("status", retrieval_status)
 
     return ManualSearchOutput(
         query=payload.query,
