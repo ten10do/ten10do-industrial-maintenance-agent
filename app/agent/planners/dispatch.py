@@ -22,12 +22,14 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from time import perf_counter
 from typing import Any
 
 from app.agent.planners.llm import LLMPlanner, PlannerResult, build_llm_planner
-from app.agent.planners.schema import PlannerError
+from app.agent.planners.schema import PlannerError, PlannerErrorCode
 from app.agent.state import MaintenanceState
 from app.config import Settings, get_settings
+from app.observability import instrumentation
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,35 @@ UNEXPECTED_PLANNER_ERROR = "UNEXPECTED_PLANNER_ERROR"
 
 #: A planner that turns the agent state into a partial state update.
 RulePlanner = Callable[[MaintenanceState], dict[str, Any]]
+
+#: Planner error code to the closed reason vocabulary reported by
+#: ``industrial_agent_planner_failures_total``. The mapping is a dict rather than
+#: a chain of comparisons so an unmapped code is visibly unmapped.
+_FAILURE_REASONS: dict[PlannerErrorCode, str] = {
+    PlannerErrorCode.LLM_PROVIDER_ERROR: "provider_error",
+    PlannerErrorCode.LLM_TIMEOUT: "timeout",
+    # A plan the planner refused is one outcome for the metric even though it has
+    # three distinct codes: the operator response is the same, and the code
+    # remains available in the log line and on the span.
+    PlannerErrorCode.INVALID_PLANNER_OUTPUT: "invalid_output",
+    PlannerErrorCode.UNKNOWN_TOOL: "invalid_output",
+    PlannerErrorCode.TOOL_ARGUMENT_VALIDATION_FAILED: "invalid_output",
+}
+
+
+def _failure_reason(exc: PlannerError, phase: str) -> str:
+    """Classify a planning failure for the metric label.
+
+    ``phase`` is ``"build"`` when the planner could not be constructed at all,
+    which is a configuration problem, and ``"plan"`` once the planner was
+    running. The distinction is structural rather than inferred from the message:
+    ``build_llm_planner`` reports a missing endpoint or key as
+    ``LLM_PROVIDER_ERROR``, the same code a network failure uses, so the code
+    alone cannot tell a misconfiguration from an outage.
+    """
+    if phase == "build":
+        return "configuration"
+    return _FAILURE_REASONS.get(exc.code, "unknown")
 
 
 def _rule_update(update: dict[str, Any], *, fallback_reason: str | None = None) -> dict[str, Any]:
@@ -102,29 +133,85 @@ def dispatch_plan(
     mode = resolved.planner_mode
 
     if mode == "rule":
-        return _rule_update(rule_planner(state))
+        return _run_rule_planner(rule_planner, state)
 
     query = state.get("query") or ""
+    started = perf_counter()
+    instrumentation.planner_started(planner=PLANNER_LLM)
+    # ``phase`` records where the failure happened, which is what separates a
+    # misconfiguration from a provider fault. It is set between the two statements
+    # rather than inferred from the exception.
+    phase = "build"
 
-    try:
-        active = planner if planner is not None else build_llm_planner(resolved)
-        result = active.plan(query)
-    except PlannerError as exc:
-        if mode == "llm":
-            logger.error("planner_failed mode=llm code=%s", exc.code_value)
-            raise
-        return _fallback(rule_planner, state, query, f"{exc.code_value}: {exc.message}")
-    except Exception as exc:  # defensive: an unexpected fault must not fail auto mode
-        if mode == "llm":
-            raise
-        return _fallback(
-            rule_planner,
-            state,
-            query,
-            f"{UNEXPECTED_PLANNER_ERROR}: {type(exc).__name__}",
+    with instrumentation.planner_span(planner=PLANNER_LLM) as active_span:
+        try:
+            active = planner if planner is not None else build_llm_planner(resolved)
+            phase = "plan"
+            result = active.plan(query)
+        except PlannerError as exc:
+            reason = _failure_reason(exc, phase)
+            instrumentation.planner_failed(
+                planner=PLANNER_LLM,
+                reason=reason,
+                duration_ms=instrumentation.elapsed_ms(started),
+            )
+            active_span.record_error(reason, exc.code_value)
+            if mode == "llm":
+                logger.error("planner_failed mode=llm code=%s", exc.code_value)
+                raise
+            update = _fallback(rule_planner, state, query, f"{exc.code_value}: {exc.message}")
+            active_span.set_attribute("status", instrumentation.STATUS_UNAVAILABLE)
+            return update
+        except Exception as exc:  # defensive: an unexpected fault must not fail auto mode
+            instrumentation.planner_failed(
+                planner=PLANNER_LLM,
+                reason="unknown",
+                duration_ms=instrumentation.elapsed_ms(started),
+            )
+            active_span.record_error(type(exc).__name__)
+            if mode == "llm":
+                raise
+            update = _fallback(
+                rule_planner,
+                state,
+                query,
+                f"{UNEXPECTED_PLANNER_ERROR}: {type(exc).__name__}",
+            )
+            active_span.set_attribute("status", instrumentation.STATUS_ERROR)
+            return update
+
+        update = _llm_update(result)
+        instrumentation.planner_completed(
+            planner=PLANNER_LLM,
+            duration_ms=instrumentation.elapsed_ms(started),
+            tools=len(update.get("required_tools") or []),
         )
+        active_span.set_attribute("status", instrumentation.STATUS_SUCCESS)
+        return update
 
-    return _llm_update(result)
+
+def _run_rule_planner(
+    rule_planner: RulePlanner,
+    state: MaintenanceState,
+) -> dict[str, Any]:
+    """Run the frozen planner under instrumentation.
+
+    The frozen planner's body and its output are untouched: this wrapper measures
+    it and reports the measurement. ``planner_used`` stays ``rule`` and no
+    argument is derived differently, so the benchmark cannot move because of a
+    timing call added around it.
+    """
+    started = perf_counter()
+    instrumentation.planner_started(planner=PLANNER_RULE)
+    with instrumentation.planner_span(planner=PLANNER_RULE) as active_span:
+        update = _rule_update(rule_planner(state))
+        instrumentation.planner_completed(
+            planner=PLANNER_RULE,
+            duration_ms=instrumentation.elapsed_ms(started),
+            tools=len(update.get("required_tools") or []),
+        )
+        active_span.set_attribute("status", instrumentation.STATUS_SUCCESS)
+    return update
 
 
 def _fallback(

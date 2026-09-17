@@ -179,12 +179,19 @@ def test_root_endpoint_reports_the_current_version() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "ok"
-    assert payload["version"] == "0.8.5"
+    assert payload["version"] == "0.9.0"
 
 
 def test_http_surface_exposes_only_the_documented_routes() -> None:
-    """The workflow is reachable through ``/agent/invoke`` and nowhere else."""
-    assert set(app.openapi()["paths"]) == {"/", "/health", INVOKE_PATH}
+    """The workflow is reachable through ``/agent/invoke`` and nowhere else.
+
+    ``/metrics`` joined the surface in V0.9.0 as the Prometheus scrape target. It
+    is a read-only rendering of an in-process registry: it exposes no agent state,
+    accepts no input and reaches no part of the workflow, so the guard this test
+    provides is unchanged. Any further addition still has to be deliberate, which
+    is why the set is spelled out rather than counted.
+    """
+    assert set(app.openapi()["paths"]) == {"/", "/health", "/metrics", INVOKE_PATH}
 
 
 def _resolve_schema(node: dict[str, Any]) -> dict[str, Any]:

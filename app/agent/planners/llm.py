@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
+from time import perf_counter
 from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
@@ -45,6 +46,7 @@ from app.integrations.llm import (
     LLMTimeoutError,
     get_llm_provider,
 )
+from app.observability import instrumentation
 from app.services.device_catalog import device_vocabulary
 from app.tools.arguments import (
     ToolArgumentError,
@@ -230,6 +232,10 @@ class LLMPlanner:
         Raises:
             PlannerError: With a code from the V0.5 taxonomy. There is no
                 partial success: a plan either validates completely or fails.
+
+        The provider call is measured and reported. The prompt and the completion
+        text are not passed to the instrumentation: a model can echo its prompt,
+        and the prompt carries the tool schemas and the device vocabulary.
         """
         request = LLMCompletionRequest(
             messages=self.build_messages(query),
@@ -239,12 +245,39 @@ class LLMPlanner:
             json_object=True,
         )
 
-        try:
-            completion = self._provider.complete(request)
-        except LLMTimeoutError as exc:
-            raise PlannerError(PlannerErrorCode.LLM_TIMEOUT, exc.message) from exc
-        except LLMProviderError as exc:
-            raise PlannerError(PlannerErrorCode.LLM_PROVIDER_ERROR, exc.message) from exc
+        provider_id = self._provider.provider_id
+        started = perf_counter()
+        instrumentation.llm_started(provider=provider_id)
+
+        with instrumentation.llm_span(provider=provider_id) as active_span:
+            try:
+                completion = self._provider.complete(request)
+            except LLMTimeoutError as exc:
+                instrumentation.llm_failed(
+                    provider=provider_id,
+                    duration_ms=instrumentation.elapsed_ms(started),
+                )
+                active_span.record_error(instrumentation.STATUS_UNAVAILABLE)
+                raise PlannerError(PlannerErrorCode.LLM_TIMEOUT, exc.message) from exc
+            except LLMProviderError as exc:
+                instrumentation.llm_failed(
+                    provider=provider_id,
+                    duration_ms=instrumentation.elapsed_ms(started),
+                )
+                active_span.record_error(instrumentation.STATUS_UNAVAILABLE)
+                raise PlannerError(PlannerErrorCode.LLM_PROVIDER_ERROR, exc.message) from exc
+
+            instrumentation.llm_completed(
+                provider=provider_id,
+                duration_ms=instrumentation.elapsed_ms(started),
+                finish_reason=completion.finish_reason,
+            )
+            instrumentation.llm_tokens(
+                provider=provider_id,
+                prompt_tokens=completion.prompt_tokens,
+                completion_tokens=completion.completion_tokens,
+            )
+            active_span.set_attribute("status", instrumentation.STATUS_SUCCESS)
 
         plan = self._validate(completion)
         return PlannerResult(

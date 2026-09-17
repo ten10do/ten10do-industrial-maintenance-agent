@@ -10,18 +10,30 @@
 # .dockerignore; only ".env.example", which holds placeholders, is readable in
 # the build context and it is not copied into the image either.
 #
-# Two build shapes come out of this one file, selected by a build argument:
+# Build shape is selected by two independent build arguments:
 #
-#   INSTALL_RAG_DEPS=0  (default)  core agent only.
-#   INSTALL_RAG_DEPS=1             additionally installs
-#                                  requirements-rag-local.txt, which the local
-#                                  RAG provider needs to import the retrieval
-#                                  engine in-process.
+#   INSTALL_RAG_DEPS   0 (default)  core agent only
+#                      1            additionally installs
+#                                   requirements-rag-local.txt, which the local
+#                                   RAG provider needs to import the retrieval
+#                                   engine in-process
 #
-# The default shape stays small: numpy, scikit-learn and pypdf are never
-# installed unless INSTALL_RAG_DEPS=1 is passed explicitly. The external
-# Industrial Knowledge RAG checkout is mounted at run time and is never copied
-# into the image.
+#   INSTALL_OTEL_DEPS  0 (default)  no OpenTelemetry SDK in the image
+#                      1            additionally installs requirements-otel.txt,
+#                                   which OTEL_ENABLED=true needs in order to
+#                                   record spans
+#
+# The default shape stays small: numpy, scikit-learn, pypdf and the
+# OpenTelemetry SDK are never installed unless the matching argument is passed
+# explicitly. The external Industrial Knowledge RAG checkout is mounted at run
+# time and is never copied into the image.
+#
+# Why the tracing dependency is a build shape rather than always installed:
+# OTEL_ENABLED defaults to false and a disabled tracer imports nothing, so the
+# default image does not need the SDK. A deployment that sets OTEL_ENABLED=true
+# without this argument still starts and logs
+# "otel_sdk_missing tracing_disabled=true"; it simply produces no spans. Build
+# with INSTALL_OTEL_DEPS=1 when you intend to trace.
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -36,21 +48,26 @@ RUN groupadd --system --gid 10001 app \
 WORKDIR /app
 
 # Dependencies first, so editing application source does not invalidate this
-# layer. Both requirement files are copied so the optional set is available to
-# the conditional install below.
+# layer. Every optional requirement file is copied so the conditional installs
+# below can reach them.
 COPY requirements.txt ./
 COPY requirements-rag-local.txt ./
+COPY requirements-otel.txt ./
 
-# Selects the build shape. Declared next to its use so a change in the value
+# Select the build shape. Declared next to their use so a change in a value
 # invalidates only the install layer.
 ARG INSTALL_RAG_DEPS=0
+ARG INSTALL_OTEL_DEPS=0
 
-# The core set is always installed. The optional RAG set is installed only when
-# INSTALL_RAG_DEPS=1, so the default image never carries numpy, scikit-learn or
-# pypdf.
+# The core set is always installed. Each optional set is installed only when its
+# argument is 1, so the default image never carries numpy, scikit-learn, pypdf or
+# the OpenTelemetry SDK.
 RUN pip install --no-cache-dir --requirement requirements.txt \
     && if [ "${INSTALL_RAG_DEPS}" = "1" ]; then \
            pip install --no-cache-dir --requirement requirements-rag-local.txt; \
+       fi \
+    && if [ "${INSTALL_OTEL_DEPS}" = "1" ]; then \
+           pip install --no-cache-dir --requirement requirements-otel.txt; \
        fi
 
 # Application source and the data the tools read. No tests and no caches.

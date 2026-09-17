@@ -47,6 +47,20 @@ def _reason(exc: BaseException) -> str:
     return type(exc).__name__[:_MAX_REASON_CHARS]
 
 
+def _token_count(value: Any) -> int | None:
+    """Return a token count the endpoint reported, or ``None``.
+
+    Only a non-negative integer counts. A missing ``usage`` block, a null, a
+    string and a negative number all map to ``None``, because reporting a
+    plausible-looking number the endpoint never sent would make an unmeasured
+    quantity look measured. ``bool`` is excluded explicitly: ``True`` is an
+    ``int`` in Python and would otherwise be counted as one token.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if value >= 0 else None
+
+
 class OpenAICompatibleProvider(LLMProvider):
     """Completion provider for any OpenAI-compatible chat completions endpoint."""
 
@@ -152,12 +166,15 @@ class OpenAICompatibleProvider(LLMProvider):
             raise LLMProviderError(f"LLM endpoint returned HTTP {response.status_code}")
 
         envelope = self._envelope(response)
+        prompt_tokens, completion_tokens = self._extract_usage(envelope)
         return LLMCompletionResult(
             text=self._extract_text(envelope),
             provider=self.provider_id,
             model=self.model,
             latency_ms=latency_ms,
             finish_reason=self._extract_finish_reason(envelope),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
         )
 
     @staticmethod
@@ -187,3 +204,19 @@ class OpenAICompatibleProvider(LLMProvider):
     def _extract_finish_reason(self, envelope: dict[str, Any]) -> str | None:
         reason = self._first_choice(envelope).get("finish_reason")
         return str(reason) if reason else None
+
+    @staticmethod
+    def _extract_usage(envelope: dict[str, Any]) -> tuple[int | None, int | None]:
+        """Return the ``(prompt, completion)`` token counts the endpoint reported.
+
+        The ``usage`` block is optional in the OpenAI-compatible envelope and some
+        servers omit it. Absent usage yields ``(None, None)`` rather than zero, so
+        a downstream metric can distinguish "not reported" from "reported zero".
+        """
+        usage = envelope.get("usage")
+        if not isinstance(usage, dict):
+            return None, None
+        return (
+            _token_count(usage.get("prompt_tokens")),
+            _token_count(usage.get("completion_tokens")),
+        )
